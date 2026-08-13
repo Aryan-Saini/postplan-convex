@@ -2,3 +2,6 @@ node_modules
 .env
 .env.local
 convex/_generated
+.claude/skills/convex*
+.agents/skills/convex*
+skills-lock.json

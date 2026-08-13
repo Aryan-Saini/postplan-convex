@@ -11,7 +11,9 @@ import { validateHtml } from "../src/html-policy.js";
 // Single source of truth for the version: package.json. CI bumps it on every
 // merge to main, so a hardcoded copy here would immediately drift.
 const { version: VERSION } = createRequire(import.meta.url)("../package.json");
-const DEFAULT_API_URL = "https://postplan.dev";
+// No deployment is baked in: point the CLI at your own instance with
+// `postplan-aryan auth set <key> --api-url <url>`, or POSTPLAN_API_URL.
+const DEFAULT_API_URL = process.env.POSTPLAN_API_URL || "https://postplan.dev";
 const POSTPLAN_DIR = path.join(os.homedir(), ".postplan");
 const CONFIG_PATH = path.join(POSTPLAN_DIR, "config.json");
 const CREDENTIALS_PATH = path.join(POSTPLAN_DIR, "credentials.json");

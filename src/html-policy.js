@@ -38,7 +38,9 @@ export function validateHtml(html, options = {}) {
     return { ok: false, errors, warnings, title: null, hasScripts: false, stats: emptyStats() };
   }
 
-  const byteLength = Buffer.byteLength(html, "utf8");
+  // TextEncoder rather than Buffer: this module is shared with the Convex
+  // runtime, which is V8 without Node globals.
+  const byteLength = new TextEncoder().encode(html).length;
   if (byteLength > maxBytes) {
     errors.push(`HTML document is ${byteLength} bytes; maximum is ${maxBytes} bytes.`);
   }
