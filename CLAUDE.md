@@ -1,5 +1,22 @@
 # postplan-convex
 
+> **This repo is PUBLIC and its CLI is published to npm as `postplan-aryan`.**
+> Anything committed here is world-readable, and anything under `bin/` or `src/`
+> is downloaded by anyone who runs `npx postplan-aryan`.
+>
+> **Never put in this repo:** deployment names or `*.convex.site` URLs, S3 bucket
+> or prefix names, IAM user names, AWS account ids, API keys, or anything from
+> `.env.local`. Not in code, not in docs, not in a commit message, not in a test
+> fixture.
+>
+> All of that is configuration, and it belongs in environment variables:
+> `.env.local` (gitignored) for the deployment, `npx convex env set --prod` for
+> server secrets, and `~/.postplan/` for the CLI's endpoint and key. Use the
+> placeholders in `.env.example` when documenting.
+>
+> Git history counts. Scrubbing a file in a later commit does not remove it —
+> history was already rewritten once for this. Check before committing, not after.
+
 Postplan with a Convex backend. Fork of postplan (MIT, t3dotgg) with the express +
 Postgres + S3 server replaced by Convex functions and Convex tables. The CLI is
 upstream's, unmodified.
