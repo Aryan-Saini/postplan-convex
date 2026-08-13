@@ -13,6 +13,20 @@ The CLI is upstream's, unmodified. No deployment is baked into the published
 package: it reads `--api-url`, then `POSTPLAN_API_URL`, then
 `~/.postplan/config.json`. Point it at your own instance.
 
+## Where uploads go
+
+Uploads go to whichever instance you configured — **not** `postplan.dev`. Run
+`auth set` once per machine; without it the CLI falls back to `postplan.dev`,
+which is somebody else's server.
+
+The instance stores each document in its S3 bucket and serves it at
+`/d/<draftId>`. Re-uploading the same file path updates that URL in place and
+bumps the version, so a link you already sent keeps working and keeps showing the
+latest. `--new` starts a separate draft instead.
+
+Draft ids are random and unguessable, and there is no listing URL: a link leads to
+one document and nothing else. `/d/<id>/raw` returns the source.
+
 ## Self-hosting
 
 You need a Convex project and an S3 bucket. No Postgres, no Railway.
