@@ -17,6 +17,9 @@ export default defineSchema({
   // is the credential, since whoever uploads may not be the person who made it.
   uploadRequests: defineTable({
     slug: v.string(),
+    // "in" = someone sends files to Aryan; "out" = an agent sends files to him.
+    // Optional so rows created before the outbound direction existed still load.
+    direction: v.optional(v.union(v.literal("in"), v.literal("out"))),
     reason: v.optional(v.string()),
     createdBy: v.string(),
     expiresAt: v.number(),

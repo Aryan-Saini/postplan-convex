@@ -3,7 +3,13 @@ import { internalMutation, internalQuery } from "./_generated/server";
 
 
 export const create = internalMutation({
-  args: { slug: v.string(), reason: v.optional(v.string()), createdBy: v.string(), days: v.number() },
+  args: {
+    slug: v.string(),
+    reason: v.optional(v.string()),
+    createdBy: v.string(),
+    days: v.number(),
+    direction: v.optional(v.union(v.literal("in"), v.literal("out"))),
+  },
   handler: async (ctx, args) => {
     const clash = await ctx.db
       .query("uploadRequests")
@@ -12,6 +18,7 @@ export const create = internalMutation({
     if (clash) throw new Error(`slug already in use: ${args.slug}`);
     await ctx.db.insert("uploadRequests", {
       slug: args.slug,
+      direction: args.direction ?? "in",
       reason: args.reason,
       createdBy: args.createdBy,
       expiresAt: Date.now() + (args.days || 7) * 24 * 60 * 60 * 1000,

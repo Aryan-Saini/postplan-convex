@@ -21,6 +21,22 @@ const DRAFTS_PATH = path.join(POSTPLAN_DIR, "drafts.json");
 
 class CliError extends Error {}
 
+const CONTENT_TYPES = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+  webp: "image/webp", svg: "image/svg+xml", heic: "image/heic", avif: "image/avif",
+  mp4: "video/mp4", mov: "video/quicktime", webm: "video/webm", m4v: "video/mp4",
+  mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4", aac: "audio/aac",
+  pdf: "application/pdf", json: "application/json", zip: "application/zip",
+  md: "text/markdown", txt: "text/plain", csv: "text/csv", log: "text/plain",
+  html: "text/html", css: "text/css", js: "text/javascript", ts: "text/plain",
+  py: "text/x-python", sh: "text/x-shellscript", yml: "text/yaml", yaml: "text/yaml"
+};
+
+function guessType(name) {
+  const ext = name.toLowerCase().split(".").pop();
+  return CONTENT_TYPES[ext] || "application/octet-stream";
+}
+
 const program = new Command();
 
 program
@@ -198,6 +214,60 @@ program
       const body = await response.json();
       if (!response.ok) throw new CliError(body.error || "Could not create the link.");
       console.log(body.url);
+  });
+
+program
+  .command("send")
+  .description("Send files to Aryan: returns a link he can preview or download on his phone.")
+  .argument("<files...>", "files to send")
+  .option("--api-url <url>", "Override the default API base URL")
+  .option("--reason <text>", "what these files are, shown on the page")
+  .option("--days <n>", "How long the link stays open (default 7)", (v) => Number(v))
+  .action(async (files, options) => {
+    const { apiUrl, apiKey } = readAuth(options.apiUrl);
+    const resolved = files.map((f) => path.resolve(f));
+    for (const file of resolved) {
+      if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
+        throw new CliError(`Not a file: ${file}`);
+      }
+    }
+
+    const created = await fetch(`${apiUrl}/api/upload-requests`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        reason: options.reason || path.basename(resolved[0]),
+        days: options.days,
+        direction: "out"
+      })
+    });
+    const info = await created.json();
+    if (!created.ok) throw new CliError(info.error || "Could not create the link.");
+
+    for (const file of resolved) {
+      const name = path.basename(file);
+      const type = guessType(name);
+      const signed = await fetch(`${apiUrl}/api/u/${info.slug}/sign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, contentType: type })
+      });
+      const slot = await signed.json();
+      if (!signed.ok) throw new CliError(slot.error || `Could not prepare ${name}.`);
+      const put = await fetch(slot.url, {
+        method: "PUT",
+        headers: { "Content-Type": type },
+        body: fs.readFileSync(file)
+      });
+      if (!put.ok) throw new CliError(`Upload failed for ${name} (${put.status})`);
+      const recorded = await fetch(`${apiUrl}/api/u/${info.slug}/record`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: slot.key, name, size: fs.statSync(file).size, contentType: type })
+      });
+      if (!recorded.ok) throw new CliError(`Could not record ${name}.`);
+    }
+    console.log(info.url);
   });
 
 program

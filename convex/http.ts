@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { validateHtml } from "../src/html-policy.js";
 import { draftKey, presign, s3Config } from "./lib/s3";
 import { uploadPage } from "./lib/uploadPage";
+import { downloadPage } from "./lib/downloadPage";
 
 /**
  * The Postplan API, served by Convex instead of express + Postgres + S3.
@@ -179,14 +180,17 @@ http.route({
     if (!auth.ok) return json({ error: "Unauthorized." }, 401);
     const body: unknown = await request.json();
     const { reason, days } = (body ?? {}) as Record<string, unknown>;
+    const { direction } = (body ?? {}) as Record<string, unknown>;
+    const out = direction === "out";
     const slug = newSlug(typeof reason === "string" ? reason : undefined);
     await ctx.runMutation(internal.uploads.create, {
       slug,
       reason: typeof reason === "string" && reason.trim() ? reason.trim() : undefined,
       createdBy: auth.account,
       days: typeof days === "number" ? days : 7,
+      direction: out ? "out" : "in",
     });
-    return json({ slug, url: `${baseUrl(request)}/u/${slug}` });
+    return json({ slug, url: `${baseUrl(request)}/${out ? "s" : "u"}/${slug}` });
   }),
 });
 
@@ -267,6 +271,34 @@ http.route({
       return page("<!doctype html><meta charset=utf-8><title>Expired</title><body style='background:#000;color:#71717a;font:16px system-ui;padding:48px'>This upload link has expired.", 410);
     }
     return page(uploadPage(slug, found.request.reason, found.files), 200);
+  }),
+});
+
+/** Files an agent sent to Aryan: previewable on a phone, downloadable to keep. */
+http.route({
+  pathPrefix: "/s/",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const slug = decodeURIComponent(new URL(request.url).pathname.slice("/s/".length).replace(/\/+$/, ""));
+    const found = await ctx.runQuery(internal.uploads.bySlug, { slug });
+    const page = (body: string, status: number) =>
+      new Response(body, { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
+    if (!found) {
+      return page("<!doctype html><meta charset=utf-8><title>Not found</title><body style='background:#000;color:#71717a;font:16px system-ui;padding:48px'>That link is not valid any more.", 404);
+    }
+    if (found.request.expiresAt < Date.now()) {
+      return page("<!doctype html><meta charset=utf-8><title>Expired</title><body style='background:#000;color:#71717a;font:16px system-ui;padding:48px'>This link has expired.", 410);
+    }
+    const config = s3Config();
+    const files = await Promise.all(
+      found.files.map(async (f) => ({
+        name: f.name,
+        size: f.size,
+        contentType: f.contentType,
+        url: await presign(config, "GET", f.key, 3600),
+      })),
+    );
+    return page(downloadPage(slug, found.request.reason, files), 200);
   }),
 });
 
