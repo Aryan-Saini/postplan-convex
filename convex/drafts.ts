@@ -54,15 +54,20 @@ export const upsert = internalMutation({
 export const latest = internalQuery({
   args: { draftId: v.string() },
   handler: async (ctx, args) => {
-    const draft = await ctx.db
+    // Same fallback as uploads: slug first, then the Convex document id.
+    let draft = await ctx.db
       .query("drafts")
       .withIndex("by_draftId", (q) => q.eq("draftId", args.draftId))
       .unique();
+    if (!draft) {
+      const id = ctx.db.normalizeId("drafts", args.draftId);
+      draft = id ? await ctx.db.get(id) : null;
+    }
     if (!draft) return null;
     const version = await ctx.db
       .query("versions")
       .withIndex("by_draft_version", (q) =>
-        q.eq("draftId", args.draftId).eq("versionNumber", draft.latestVersion),
+        q.eq("draftId", draft.draftId).eq("versionNumber", draft.latestVersion),
       )
       .unique();
     return version ? { draft, version } : null;

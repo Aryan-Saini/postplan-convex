@@ -181,7 +181,9 @@ program
   });
 
 program
-  .command("generate-link")
+  .command("generate-upload-link")
+  // 0.2.0 shipped this as `generate-link`; keep it working for anything cached.
+  .alias("generate-link")
   .description("Create a link someone can open on a phone to send files in.")
   .argument("[reason]", "why the link exists, shown on the page")
   .option("--api-url <url>", "Override the default API base URL")

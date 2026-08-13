@@ -39,11 +39,36 @@ function baseUrl(request: Request): string {
   return process.env.POSTPLAN_PUBLIC_BASE_URL ?? new URL(request.url).origin;
 }
 
-/** Unguessable id: the URL is the credential, so it must not be enumerable. */
-function newDraftId(): string {
-  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
-  const bytes = crypto.getRandomValues(new Uint8Array(12));
-  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+const ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+function randomId(length = 8): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
+  return Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join("");
+}
+
+/**
+ * A readable slug plus a random id: `physio-exercise-sheets-84gosen4`.
+ *
+ * The URL is the only credential, so a purely readable slug would be guessable by
+ * anyone who knows what Aryan is working on -- the id is what makes it safe. With
+ * nothing readable to work from, the id alone is the slug.
+ *
+ * This is the handle, not the primary key. The Convex document id still resolves
+ * the same record (see the lookups in uploads.ts / drafts.ts), so a link is
+ * recoverable even if the slug is lost.
+ */
+function newSlug(readable?: string): string {
+  const base = (readable ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .split("-")
+    .filter(Boolean)
+    .slice(0, 5)
+    .join("-")
+    .slice(0, 40)
+    .replace(/-+$/, "");
+  return base ? `${base}-${randomId()}` : randomId(12);
 }
 
 const http = httpRouter();
@@ -90,7 +115,10 @@ http.route({
       return json({ error: "HTML failed Postplan validation.", errors: validation.errors }, 400);
     }
 
-    const id = typeof draftId === "string" && draftId ? draftId : newDraftId();
+    const id =
+      typeof draftId === "string" && draftId
+        ? draftId
+        : newSlug(filename.replace(/\.[a-z0-9]+$/i, ""));
 
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(html));
     const sha256 = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
@@ -151,7 +179,7 @@ http.route({
     if (!auth.ok) return json({ error: "Unauthorized." }, 401);
     const body: unknown = await request.json();
     const { reason, days } = (body ?? {}) as Record<string, unknown>;
-    const slug = newDraftId();
+    const slug = newSlug(typeof reason === "string" ? reason : undefined);
     await ctx.runMutation(internal.uploads.create, {
       slug,
       reason: typeof reason === "string" && reason.trim() ? reason.trim() : undefined,

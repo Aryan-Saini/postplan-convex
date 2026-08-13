@@ -23,14 +23,20 @@ export const create = internalMutation({
 export const bySlug = internalQuery({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
-    const request = await ctx.db
+    // The slug is the handle; the Convex document id is a fallback so a link
+    // still resolves if the slug is ever lost or rewritten.
+    let request = await ctx.db
       .query("uploadRequests")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
       .unique();
+    if (!request) {
+      const id = ctx.db.normalizeId("uploadRequests", args.slug);
+      request = id ? await ctx.db.get(id) : null;
+    }
     if (!request) return null;
     const files = await ctx.db
       .query("uploadFiles")
-      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+      .withIndex("by_slug", (q) => q.eq("slug", request.slug))
       .collect();
     return { request, files };
   },
