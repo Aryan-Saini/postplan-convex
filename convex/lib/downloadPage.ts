@@ -63,11 +63,11 @@ li{border-top:1px solid #1c1c1f;padding:18px 0}
 .acts a{background:#fafafa;color:#000;border-color:transparent}
 .acts button:hover{background:#18181b}
 .media{margin-top:14px}
-.media img,.media video{display:block;width:100%;max-height:70vh;object-fit:contain;background:#0a0a0b;border-radius:14px}
+.media img,.media video{display:block;width:auto;max-width:100%;max-height:260px;object-fit:contain;background:#0a0a0b;border-radius:12px}
 .media audio{width:100%}
 .slot:not(:empty){margin-top:14px}
-.slot iframe{width:100%;height:70vh;border:0;border-radius:14px;background:#fff}
-.slot pre{margin:0;max-height:60vh;overflow:auto;background:#0a0a0b;border:1px solid #1c1c1f;border-radius:14px;padding:14px;font:13px/1.55 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:#d4d4d8}
+.slot iframe{width:100%;height:min(70vh,540px);border:0;border-radius:12px;background:#fff}
+.slot pre{margin:0;max-height:340px;overflow:auto;background:#0a0a0b;border:1px solid #1c1c1f;border-radius:14px;padding:14px;font:13px/1.55 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:#d4d4d8}
 .hint{margin-top:26px;font-size:13px;color:#52525b}
 </style></head>
 <body><main>
