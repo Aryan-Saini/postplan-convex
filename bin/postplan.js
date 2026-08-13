@@ -181,6 +181,56 @@ program
   });
 
 program
+  .command("generate-link")
+  .description("Create a link someone can open on a phone to send files in.")
+  .argument("[reason]", "why the link exists, shown on the page")
+  .option("--api-url <url>", "Override the default API base URL")
+  .option("--days <n>", "How long the link stays open (default 7)", (v) => Number(v))
+  .action(async (reason, options) => {
+      const { apiUrl, apiKey } = readAuth(options.apiUrl);
+      const response = await fetch(`${apiUrl}/api/upload-requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ reason: reason || undefined, days: options.days })
+      });
+      const body = await response.json();
+      if (!response.ok) throw new CliError(body.error || "Could not create the link.");
+      console.log(body.url);
+  });
+
+program
+  .command("fetch")
+  .description("Download what was sent to an upload link.")
+  .argument("<slug>", "the upload link's slug")
+  .option("--api-url <url>", "Override the default API base URL")
+  .option("--output <dir>", "Where to write the files")
+  .action(async (slug, options) => {
+      const { apiUrl, apiKey } = readAuth(options.apiUrl);
+      const response = await fetch(`${apiUrl}/api/upload-requests/list`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ slug })
+      });
+      const body = await response.json();
+      if (!response.ok) throw new CliError(body.error || "Could not read that link.");
+      if (!body.files.length) {
+        console.log("Nothing has been sent to this link yet.");
+        return;
+      }
+      const dir = options.output || path.join(os.homedir(), "Downloads", `upload-${slug}`);
+      fs.mkdirSync(dir, { recursive: true });
+      for (const file of body.files) {
+        const safe = path.basename(file.name).replace(/[/\\]/g, "_") || "file";
+        const destination = path.join(dir, safe);
+        const data = await fetch(file.url);
+        if (!data.ok) throw new CliError(`Could not download ${file.name} (${data.status})`);
+        fs.writeFileSync(destination, Buffer.from(await data.arrayBuffer()));
+        console.log(destination);
+      }
+      console.log(`Downloaded ${body.files.length} file(s) to ${dir}`);
+  });
+
+program
   .command("list")
   .description("List the drafts published to your account.")
   .option("--api-url <url>", "Override the default Postplan API base URL")

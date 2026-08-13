@@ -13,6 +13,24 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_draftId", ["draftId"]),
 
+  // An upload request: a link someone opens on a phone to send files in. The slug
+  // is the credential, since whoever uploads may not be the person who made it.
+  uploadRequests: defineTable({
+    slug: v.string(),
+    reason: v.optional(v.string()),
+    createdBy: v.string(),
+    expiresAt: v.number(),
+  }).index("by_slug", ["slug"]),
+
+  uploadFiles: defineTable({
+    slug: v.string(),
+    key: v.string(),
+    name: v.string(),
+    size: v.number(),
+    contentType: v.string(),
+    uploadedAt: v.number(),
+  }).index("by_slug", ["slug"]),
+
   versions: defineTable({
     draftId: v.string(),
     versionNumber: v.number(),

@@ -3,6 +3,7 @@ import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { validateHtml } from "../src/html-policy.js";
 import { draftKey, presign, s3Config } from "./lib/s3";
+import { uploadPage } from "./lib/uploadPage";
 
 /**
  * The Postplan API, served by Convex instead of express + Postgres + S3.
@@ -134,6 +135,110 @@ http.route({
     const auth = authorize(request);
     if (!auth.ok) return json({ error: "Unauthorized." }, 401);
     return json({ drafts: await ctx.runQuery(internal.drafts.list, {}) });
+  }),
+});
+
+/**
+ * Upload requests. The page and its two endpoints are deliberately unauthenticated:
+ * the slug is the credential, because whoever uploads is often not the person who
+ * generated the link. Creating and reading a request still requires the API key.
+ */
+http.route({
+  path: "/api/upload-requests",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const auth = authorize(request);
+    if (!auth.ok) return json({ error: "Unauthorized." }, 401);
+    const body: unknown = await request.json();
+    const { reason, days } = (body ?? {}) as Record<string, unknown>;
+    const slug = newDraftId();
+    await ctx.runMutation(internal.uploads.create, {
+      slug,
+      reason: typeof reason === "string" && reason.trim() ? reason.trim() : undefined,
+      createdBy: auth.account,
+      days: typeof days === "number" ? days : 7,
+    });
+    return json({ slug, url: `${baseUrl(request)}/u/${slug}` });
+  }),
+});
+
+http.route({
+  path: "/api/upload-requests/list",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const auth = authorize(request);
+    if (!auth.ok) return json({ error: "Unauthorized." }, 401);
+    const body: unknown = await request.json();
+    const { slug } = (body ?? {}) as Record<string, unknown>;
+    if (typeof slug !== "string") return json({ error: "slug is required." }, 400);
+    const found = await ctx.runQuery(internal.uploads.bySlug, { slug });
+    if (!found) return json({ error: "no such upload link" }, 404);
+    const config = s3Config();
+    const files = await Promise.all(
+      found.files.map(async (f) => ({
+        name: f.name,
+        size: f.size,
+        contentType: f.contentType,
+        url: await presign(config, "GET", f.key, 3600),
+      })),
+    );
+    return json({ slug, reason: found.request.reason ?? null, expiresAt: found.request.expiresAt, files });
+  }),
+});
+
+/** Mint a presigned PUT for the phone. No API key: the slug is the credential. */
+http.route({
+  pathPrefix: "/api/u/",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const path = new URL(request.url).pathname;
+    const match = path.match(/^\/api\/u\/([^/]+)\/(sign|record)$/);
+    if (!match) return json({ error: "Not found." }, 404);
+    const [, slug, action] = match;
+
+    const found = await ctx.runQuery(internal.uploads.bySlug, { slug });
+    if (!found) return json({ error: "no such upload link" }, 404);
+    if (found.request.expiresAt < Date.now()) return json({ error: "this link has expired" }, 410);
+
+    const body: unknown = await request.json();
+    const fields = (body ?? {}) as Record<string, unknown>;
+
+    if (action === "sign") {
+      const { name, contentType } = fields;
+      if (typeof name !== "string" || typeof contentType !== "string") {
+        return json({ error: "name and contentType are required." }, 400);
+      }
+      const config = s3Config();
+      const suffix = name.includes(".") ? name.slice(name.lastIndexOf(".")).toLowerCase().slice(0, 20) : "";
+      const key = `${config.prefix}/uploads/${slug}/${found.files.length + 1}${suffix}`;
+      return json({ key, url: await presign(config, "PUT", key, 3600) });
+    }
+
+    const { key, name, size, contentType } = fields;
+    if (typeof key !== "string" || typeof name !== "string" || typeof size !== "number" || typeof contentType !== "string") {
+      return json({ error: "key, name, size and contentType are required." }, 400);
+    }
+    await ctx.runMutation(internal.uploads.addFile, { slug, key, name, size, contentType });
+    return json({ ok: true });
+  }),
+});
+
+/** The page itself. */
+http.route({
+  pathPrefix: "/u/",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const slug = decodeURIComponent(new URL(request.url).pathname.slice("/u/".length).replace(/\/+$/, ""));
+    const found = await ctx.runQuery(internal.uploads.bySlug, { slug });
+    const page = (body: string, status: number) =>
+      new Response(body, { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
+    if (!found) {
+      return page("<!doctype html><meta charset=utf-8><title>Not found</title><body style='background:#000;color:#71717a;font:16px system-ui;padding:48px'>That link is not valid any more.", 404);
+    }
+    if (found.request.expiresAt < Date.now()) {
+      return page("<!doctype html><meta charset=utf-8><title>Expired</title><body style='background:#000;color:#71717a;font:16px system-ui;padding:48px'>This upload link has expired.", 410);
+    }
+    return page(uploadPage(slug, found.request.reason, found.files), 200);
   }),
 });
 
