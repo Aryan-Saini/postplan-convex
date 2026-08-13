@@ -1,6 +1,6 @@
 {
   "name": "postplan-aryan",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Publish a self-contained HTML document and get a link. Convex + S3 backend. Fork of postplan (MIT, t3dotgg).",
   "type": "module",
   "license": "MIT",
