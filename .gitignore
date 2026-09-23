@@ -6,3 +6,5 @@ convex/_generated
 .agents/skills/convex*
 skills-lock.json
 out/
+examples/*.html
+examples/*.json

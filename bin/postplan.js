@@ -7,6 +7,8 @@ import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
 import { validateHtml } from "../src/html-policy.js";
+import { render } from "../src/render/index.js";
+import { formatError } from "../src/render/schema/index.js";
 
 // Single source of truth for the version: package.json. CI bumps it on every
 // merge to main, so a hardcoded copy here would immediately drift.
@@ -117,20 +119,92 @@ program
   });
 
 program
-  .command("upload")
-  .argument("<file>", "HTML file path")
+  .command("render")
+  .argument("<input>", "Markdown (.md) or an already-built IR (.json)")
+  .option("--out <path>", "Where to write the HTML (default: the input path with .html)")
+  .option("--emit-ir", "Also write the block IR beside the output, as .json")
+  .option("--upload", "Publish the rendered HTML, keyed by the source path")
   .option("--draft <draft-id>", "Update a specific draft")
   .option("--new", "Always create a new draft")
   .option("--description <text>", "Set a short description for the draft")
   .option("--api-url <url>", "Override the default Postplan API base URL")
-  .description("Upload or update an HTML draft.")
+  .description("Render Markdown to a self-contained HTML document.")
+  .action(async (input, options) => {
+    const source = path.resolve(input);
+    const out = options.out ? path.resolve(options.out) : withExtension(source, ".html");
+    const { html, ir } = renderFile(source);
+
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, html);
+    console.log(out);
+
+    if (options.emitIr) {
+      const irPath = withExtension(out, ".json");
+      fs.writeFileSync(irPath, `${JSON.stringify(ir, null, 2)}\n`);
+      console.log(irPath);
+    }
+
+    if (options.upload) await publish(out, source, options);
+  });
+
+program
+  .command("upload")
+  .argument("<file>", "HTML file path, or Markdown to render first")
+  .option("--draft <draft-id>", "Update a specific draft")
+  .option("--new", "Always create a new draft")
+  .option("--description <text>", "Set a short description for the draft")
+  .option("--api-url <url>", "Override the default Postplan API base URL")
+  .description("Upload or update an HTML draft. Markdown is rendered first.")
   .action(async (file, options) => {
     const resolvedFile = path.resolve(file);
-    const { apiUrl, apiKey } = readAuth(options.apiUrl, { requireApiKey: false });
 
     if (!fs.existsSync(resolvedFile)) {
       throw new CliError(`File does not exist: ${resolvedFile}`);
     }
+
+    // Markdown is rendered to the sibling .html and that is what is published,
+    // but the draft stays keyed by the .md: re-uploading the source it was
+    // written from keeps the URL, which is the path an author actually edits.
+    if (path.extname(resolvedFile).toLowerCase() === ".md") {
+      const out = withExtension(resolvedFile, ".html");
+      fs.writeFileSync(out, renderFile(resolvedFile).html);
+      await publish(out, resolvedFile, options);
+      return;
+    }
+
+    await publish(resolvedFile, resolvedFile, options);
+  });
+
+/**
+ * Render a `.md` or a `.json` IR, or report every diagnostic and exit. Nothing
+ * is written on failure, so a bad document never leaves a stale file behind.
+ */
+function renderFile(source) {
+  if (!fs.existsSync(source)) throw new CliError(`File does not exist: ${source}`);
+  const text = fs.readFileSync(source, "utf8");
+  const input = path.extname(source).toLowerCase() === ".json" ? JSON.parse(text) : text;
+
+  const result = render(input, { file: source });
+  if (result.errors.length) {
+    for (const error of result.errors) console.error(formatError(error));
+    process.exit(1);
+  }
+  return result;
+}
+
+/** Swap a path's extension, so `plan.md` becomes `plan.html`. */
+function withExtension(file, ext) {
+  return path.join(path.dirname(file), `${path.basename(file, path.extname(file))}${ext}`);
+}
+
+/**
+ * Publish `htmlPath`, remembering the draft under `key`. The two differ only for
+ * Markdown, where the key is the source the author edits and the HTML is a build
+ * artifact that may be deleted between runs.
+ */
+async function publish(htmlPath, key, options) {
+    const resolvedFile = htmlPath;
+    const { apiUrl, apiKey } = readAuth(options.apiUrl, { requireApiKey: false });
 
     const html = fs.readFileSync(resolvedFile, "utf8");
     const validation = validateHtml(html);
@@ -140,7 +214,7 @@ program
     }
 
     const drafts = readDrafts();
-    const knownDraft = drafts.files?.[resolvedFile];
+    const knownDraft = drafts.files?.[key];
     const draftId = options.new ? null : options.draft || knownDraft?.draftId || null;
 
     const payload = {
@@ -177,7 +251,7 @@ program
     }
 
     drafts.files ||= {};
-    drafts.files[resolvedFile] = {
+    drafts.files[key] = {
       draftId: body.draftId,
       publicUrl: body.publicUrl,
       rawUrl: body.rawUrl || `${body.publicUrl.replace(/\/+$/, "")}/raw`,
@@ -194,7 +268,7 @@ program
     for (const warning of body.warnings || []) {
       console.warn(`Warning: ${warning}`);
     }
-  });
+}
 
 program
   .command("generate-upload-link")

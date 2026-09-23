@@ -49,8 +49,11 @@ function version() {
  * @param {{ file?: string, baseDir?: string }} [opts]
  *   `file` names the source in error messages; `baseDir` is what a block's
  *   `data.src` path is resolved against, defaulting to the source's directory.
- * @returns {{ html: string | null, errors: RenderError[], doc: Doc }}
- *   `html` is null whenever `errors` is non-empty.
+ * @returns {{ html: string | null, errors: RenderError[], doc: Doc, ir: Doc }}
+ *   `html` is null whenever `errors` is non-empty. `ir` is the document exactly
+ *   as authored, which is what `--emit-ir` writes and what this function
+ *   accepts back; `doc` is the normalised copy the renderers were handed, and
+ *   its filled-in defaults are not valid input.
  */
 export function render(input, opts = {}) {
   const file = opts.file ?? "<input>";
@@ -64,7 +67,8 @@ export function render(input, opts = {}) {
   const doc = normalize(parsed.doc) ?? parsed.doc;
   errors.push(...resolveSources(doc, { file, baseDir }));
 
-  if (errors.length) return { html: null, errors, doc };
+  const ir = parsed.doc;
+  if (errors.length) return { html: null, errors, doc, ir };
 
   const html = page({ title: doc.meta.title, body: renderBody(doc), generator: GENERATOR });
 
@@ -72,9 +76,9 @@ export function render(input, opts = {}) {
   for (const message of policy.errors) {
     errors.push({ file, line: 1, block: "document", message });
   }
-  if (errors.length) return { html: null, errors, doc };
+  if (errors.length) return { html: null, errors, doc, ir };
 
-  return { html, errors, doc };
+  return { html, errors, doc, ir };
 }
 
 /** Fences whose `data.src` names a JSON file on disk rather than a media URL. */
