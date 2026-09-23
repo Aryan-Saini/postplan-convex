@@ -20,6 +20,9 @@ importers:
       parse5:
         specifier: ^7.3.0
         version: 7.3.0
+      temml:
+        specifier: ^0.13.5
+        version: 0.13.5
     devDependencies:
       convex:
         specifier: ^1.43.0
@@ -233,6 +236,10 @@ packages:
     engines: {node: '>=14'}
     hasBin: true
 
+  temml@0.13.5:
+    resolution: {integrity: sha512-aPkDDgunanpLNL0ql32HbolqLep+w8DRcVXRql7rWrMt/PhczdLgL4UBYYVU3BYjCNjkGq4EqwIicu/zWr1iOg==}
+    engines: {node: '>=18.13.0'}
+
   ws@8.21.0:
     resolution: {integrity: sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==}
     engines: {node: '>=10.0.0'}
@@ -376,5 +383,7 @@ snapshots:
       entities: 6.0.1
 
   prettier@3.9.6: {}
+
+  temml@0.13.5: {}
 
   ws@8.21.0: {}

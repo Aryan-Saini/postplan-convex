@@ -25,7 +25,8 @@
     "commander": "^14.0.0",
     "marked": "^18.0.13",
     "nanoid": "^5.1.5",
-    "parse5": "^7.3.0"
+    "parse5": "^7.3.0",
+    "temml": "^0.13.5"
   },
   "repository": {
     "type": "git",
