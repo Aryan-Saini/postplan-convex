@@ -255,22 +255,36 @@ http.route({
   }),
 });
 
-/** The page itself. */
+const filePageHeaders = () => ({
+  "Content-Type": "text/html; charset=utf-8",
+});
+
+/** A dead link or an expired one: same plain page, same headers. */
+const filePageNotice = (title: string, text: string, status: number) =>
+  new Response(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8">`
+      + `<meta name="viewport" content="width=device-width,initial-scale=1">`
+      + `<meta name="color-scheme" content="dark"><title>${title}</title></head>`
+      + `<body style="margin:0;background:#000;color:#898781;font:17px/1.5 system-ui,-apple-system,sans-serif">`
+      + `<main style="width:min(560px,calc(100% - 32px));margin:0 auto;padding:44px 0">${text}</main></body></html>`,
+    { status, headers: filePageHeaders() },
+  );
+
+/** The page someone opens to send files in. */
 http.route({
   pathPrefix: "/u/",
   method: "GET",
   handler: httpAction(async (ctx, request) => {
     const slug = decodeURIComponent(new URL(request.url).pathname.slice("/u/".length).replace(/\/+$/, ""));
     const found = await ctx.runQuery(internal.uploads.bySlug, { slug });
-    const page = (body: string, status: number) =>
-      new Response(body, { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
-    if (!found) {
-      return page("<!doctype html><meta charset=utf-8><title>Not found</title><body style='background:#000;color:#71717a;font:16px system-ui;padding:48px'>That link is not valid any more.", 404);
-    }
+    if (!found) return filePageNotice("Not found", "That link is not valid any more.", 404);
     if (found.request.expiresAt < Date.now()) {
-      return page("<!doctype html><meta charset=utf-8><title>Expired</title><body style='background:#000;color:#71717a;font:16px system-ui;padding:48px'>This upload link has expired.", 410);
+      return filePageNotice("Expired", "This upload link has expired.", 410);
     }
-    return page(uploadPage(slug, found.request.reason, found.files), 200);
+    return new Response(
+      uploadPage(slug, found.request.reason, found.files, found.request.expiresAt),
+      { status: 200, headers: filePageHeaders() },
+    );
   }),
 });
 
@@ -281,13 +295,9 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     const slug = decodeURIComponent(new URL(request.url).pathname.slice("/s/".length).replace(/\/+$/, ""));
     const found = await ctx.runQuery(internal.uploads.bySlug, { slug });
-    const page = (body: string, status: number) =>
-      new Response(body, { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
-    if (!found) {
-      return page("<!doctype html><meta charset=utf-8><title>Not found</title><body style='background:#000;color:#71717a;font:16px system-ui;padding:48px'>That link is not valid any more.", 404);
-    }
+    if (!found) return filePageNotice("Not found", "That link is not valid any more.", 404);
     if (found.request.expiresAt < Date.now()) {
-      return page("<!doctype html><meta charset=utf-8><title>Expired</title><body style='background:#000;color:#71717a;font:16px system-ui;padding:48px'>This link has expired.", 410);
+      return filePageNotice("Expired", "This link has expired.", 410);
     }
     const config = s3Config();
     const files = await Promise.all(
@@ -298,7 +308,20 @@ http.route({
         url: await presign(config, "GET", f.key, 3600),
       })),
     );
-    return page(downloadPage(slug, found.request.reason, files), 200);
+    // "Sent" is when the last file landed; for an empty link, when the link was made.
+    const sentAt = found.files.reduce(
+      (latest, f) => Math.max(latest, f.uploadedAt),
+      found.request._creationTime,
+    );
+    return new Response(
+      downloadPage({
+        reason: found.request.reason,
+        files,
+        sentAt,
+        expiresAt: found.request.expiresAt,
+      }),
+      { status: 200, headers: filePageHeaders() },
+    );
   }),
 });
 
