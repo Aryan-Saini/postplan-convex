@@ -32,7 +32,8 @@ export const CSS = `
   --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --critical:#d03b3b;
   --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
   --sans:system-ui,-apple-system,"Segoe UI",Inter,Roboto,sans-serif;
-  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  /* Aryan's editor font stack (VS Code / Cursor), with the system monospace as the floor */
+  --mono:"Cascadia Code","Cascadia Mono","JetBrains Mono",Menlo,Monaco,ui-monospace,monospace;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -212,27 +213,44 @@ svg.chart{display:block;overflow:visible;min-width:520px}
 .meter-track{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
 .meter-fill{height:100%;border-radius:3px}
 
-/* ---- code ---- */
+/* ---- code: One Dark Pro on the surface, at the editor's 15/1.4 scaled to the page ---- */
+code,.code pre{font-feature-settings:"calt" 1,"ss01" 1;font-variant-ligatures:contextual;tab-size:2}
 .code{border-radius:8px;background:var(--surface);margin:0 0 20px;overflow:hidden;border:1px solid var(--line)}
-.code-head{display:flex;justify-content:space-between;align-items:center;padding:8px 16px;
+.code-head{display:flex;align-items:center;gap:12px;min-height:44px;padding:5px 8px 5px 14px;
   border-bottom:1px solid var(--line);background:var(--surface-2)}
-.code-file{font:13px var(--mono);color:var(--ink)}
-.code-lang{font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink)}
-.code pre{margin:0;padding:16px 0 16px 18px;overflow-x:auto;font:14.5px/1.6 var(--mono);color:#e4e4dd}
-.code pre > code{display:block;padding-right:18px}
+.code-file{font:13px var(--mono);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.code-lang{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--ink);white-space:nowrap}
+.code-icon{width:16px;height:16px;flex:none}
+.code-tools{margin-left:auto;display:flex;align-items:center;gap:12px;flex:none}
+.copy{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid var(--line-strong);
+  border-radius:999px;background:transparent;color:var(--ink);font:13px/1 var(--sans);cursor:pointer}
+.copy:hover{border-color:#5a5a55}
+.copy:focus-visible{outline:2px solid #5c9cf0;outline-offset:2px}
+.copy[hidden]{display:none}
+.copy-icon{width:14px;height:14px;flex:none}
+.sprite{position:absolute;width:0;height:0;overflow:hidden}
+.code pre{margin:0;padding:14px 0;overflow-x:auto;font:15px/1.4 var(--mono);color:#abb2bf}
+.code pre > code{display:block;padding:0 18px;width:max-content;min-width:100%}
 .code code{background:0;border:0;padding:0;font-size:inherit;color:inherit;border-radius:0}
-.code-lines{margin:0;padding:0;list-style:none;counter-reset:l;min-width:max-content}
-.code-lines li{counter-increment:l;white-space:pre;position:relative;padding-left:36px;padding-right:18px;
-  margin:0;display:block}
-.code-lines li::before{content:counter(l);position:absolute;left:0;width:22px;text-align:right;
-  color:var(--ink);font-size:.85em;font-variant-numeric:tabular-nums}
-.t-kw{color:#c792ea} .t-str{color:#9ccc7c} .t-num{color:#f2a15c} .t-com{color:#6a6a63;font-style:italic}
-.t-fn{color:#82aaff} .t-type{color:#7fd6c1} .t-key{color:#82aaff} .t-op{color:#b0b0a8}
-.t-punc{color:#8f8f88} .t-tag{color:#e66767} .t-attr{color:#c98500} .t-meta{color:#d55181}
-.d-add{color:#9ccc7c;background:rgba(12,163,12,.12)}
-.d-del{color:#e88d8d;background:rgba(208,59,59,.12)}
-.d-hunk{color:var(--ink)}
-.d-ctx{color:var(--ink)}
+/* numbered lines: a white 13px gutter, a hairline, and numbers that drag-copy skips */
+.code-lines,.diff-lines{margin:0;padding:0;list-style:none;min-width:max-content}
+.code-lines{counter-reset:l;position:relative}
+.code-lines::before{content:"";position:absolute;top:-14px;bottom:-14px;left:44px;border-left:1px solid var(--line)}
+.code-lines li,.diff-lines li{white-space:pre;margin:0;display:block}
+.code-lines li{counter-increment:l;padding:0 18px 0 58px}
+.code-lines li::before{content:counter(l);display:inline-block;width:32px;margin:0 26px 0 -58px;text-align:right;
+  font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums;user-select:none;-webkit-user-select:none}
+.t-kw{color:#c678dd} .t-str{color:#98c379} .t-num,.t-const{color:#d19a66} .t-fn{color:#61afef}
+.t-type{color:#e5c07b} .t-var,.t-this,.t-prop,.t-key{color:#e06c75} .t-op{color:#56b6c2}
+.t-punc{color:#abb2bf} .t-com{color:#7f848e;font-style:italic} .t-tag{color:#e06c75}
+.t-attr,.t-flag{color:#d19a66} .t-regex{color:#98c379} .t-esc{color:#56b6c2} .t-meta{color:#e5c07b}
+/* diff: tinted rows, a +/- sign column, context in the default code colour */
+.diff-lines li{padding:0 18px 0 0;color:#abb2bf}
+.d-sign{display:inline-block;width:30px;text-align:center}
+.diff-lines .d-add{color:#98c379;background:rgba(152,195,121,.12)}
+.diff-lines .d-del{color:#e06c75;background:rgba(224,108,117,.12)}
+.diff-lines .d-hunk{color:#61afef;padding-left:30px}
 
 /* ---- timeline ---- */
 .timeline{list-style:none;margin:0 0 20px;padding:0 0 0 20px;border-left:1px solid var(--line-strong)}
@@ -303,7 +321,8 @@ const escText = (v) =>
 
 /**
  * Wrap body HTML in a complete, self-contained document: one <style>, no
- * external stylesheet, no webfont, no script.
+ * external stylesheet, no webfont. The only script is the inline one a body
+ * with code blocks brings for its Copy buttons.
  *
  * @param {{ title: string, body: string, generator?: string }} opts
  *   `generator` is stamped as `<meta name="generator">` so a reader (and

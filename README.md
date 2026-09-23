@@ -16,8 +16,12 @@ instance.
 ## Rendering Markdown
 
 `render` turns a Markdown document into the same self-contained HTML the upload
-endpoint accepts: one file, no script, no webfont, no network call. Charts,
-diagrams and formulas are generated as inline SVG and MathML at render time.
+endpoint accepts: one file, no webfont, no network call. Charts, diagrams and
+formulas are generated as inline SVG and MathML at render time.
+
+Code blocks are highlighted at render time in One Dark Pro with a language icon,
+and each has a Copy button that puts the raw source on the clipboard; that button
+is the only script a document carries, and a document without code has none.
 
 ```bash
 npx postplan-aryan render plan.md              # writes plan.html

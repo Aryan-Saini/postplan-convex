@@ -15,7 +15,7 @@
 
 import { escapeHtml } from "./parse.js";
 import { meter, renderChart, sparkline } from "./charts.js";
-import { renderCode, renderDiff } from "./code.js";
+import { COPY_SCRIPT, codeSprite, iconKey, renderCode, renderDiff } from "./code.js";
 import { renderFlow, renderSequence } from "./diagram.js";
 import { renderInlineMath, renderMathBlock, unescapeHtml } from "./math.js";
 
@@ -35,6 +35,10 @@ const newCtx = () => ({ lightboxes: [], zoomCount: 0, heading: "" });
 /**
  * Render a whole document body: title, byline, contents strip, then every block
  * in order, with any lightbox overlays collected at the end.
+ *
+ * A document with code blocks also gets, once each, the icon sprite their
+ * headers reference (top of the body) and the Copy button's script (end of the
+ * body). A document without code carries neither, so it stays script-free.
  *
  * @param {Doc} doc
  * @returns {string}
@@ -58,7 +62,11 @@ export function renderBody(doc) {
   for (; i < blocks.length; i++) parts.push(renderBlock(blocks[i], ctx));
   parts.push(...ctx.lightboxes);
 
-  return `<div class="wrap"><main>\n${parts.filter(Boolean).join("\n")}\n</main></div>`;
+  const wrap = `<div class="wrap"><main>\n${parts.filter(Boolean).join("\n")}\n</main></div>`;
+  const code = blocks.filter((b) => b.type === "code" || b.type === "diff");
+  if (!code.length) return wrap;
+  const icons = code.map((b) => (b.type === "diff" ? "diff" : iconKey(b.lang)));
+  return `${codeSprite(icons)}\n${wrap}\n<script>${COPY_SCRIPT}</script>`;
 }
 
 /**

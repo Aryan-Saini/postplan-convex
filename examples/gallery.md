@@ -247,8 +247,9 @@ ordered drop-off, a schedule, one panel per item, and a share of a whole that is
 
 ## Code
 
-Highlighted at build time into plain spans, with an optional filename header and line numbers. No runtime
-highlighter, so the block costs nothing to render and works with scripts blocked.
+Highlighted at build time into plain spans in One Dark Pro, with a language icon, an optional filename
+header and line numbers. Copy puts the raw source on the clipboard; with scripts blocked the button is
+hidden and the block still reads the same.
 
 ```ts file=src/upload.ts lines
 export async function upload(html: string, filename: string): Promise<Draft> {
@@ -260,6 +261,28 @@ export async function upload(html: string, filename: string): Promise<Draft> {
 
   return post("/api/uploads", { html, filename });
 }
+```
+
+```tsx file=src/DraftCard.tsx
+export function DraftCard({ draft, onOpen }: { draft: Draft; onOpen: (id: string) => void }) {
+  const label = `v${draft.versionNumber} · ${draft.warnings.length} warnings`;
+  return (
+    <li className="draft" data-id={draft.draftId}>
+      <button type="button" onClick={() => onOpen(draft.draftId)}>{draft.title}</button>
+      <Badge tone={draft.warnings.length ? "warn" : "good"}>{label}</Badge>
+    </li>
+  );
+}
+```
+
+```python title="Retry a flaky upload"
+@retry(times=3, backoff=0.5)
+def upload(self, path: str) -> dict:
+    html = self.render(path)
+    size = len(html.encode("utf-8"))
+    if size > MAX_HTML_BYTES:
+        raise UploadError(f"{path}: {size / 1024:.1f} KiB exceeds the cap")
+    return self.client.post("/api/uploads", json={"html": html, "filename": path})
 ```
 
 ```bash
