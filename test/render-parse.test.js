@@ -261,8 +261,9 @@ test("parseIr rejects a bad shape without throwing", () => {
 test("render wires the pipeline end to end", () => {
   const out = render("# T\n\nLead.\n", { file: "t.md" });
   assert.deepEqual(out.errors, []);
-  assert.match(out.html, /^<pre class="ir">/);
-  assert.match(out.html, /&quot;version&quot;: 1/);
+  assert.match(out.html, /^<!doctype html>/);
+  assert.match(out.html, /<title>T<\/title>/);
+  assert.match(out.html, /<p class="lead">Lead\.<\/p>/);
 });
 
 test("examples/gallery.md parses clean", () => {

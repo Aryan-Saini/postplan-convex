@@ -1,0 +1,192 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { byline, contents, render, renderBlock, renderBody, GENERATOR } from "../src/render/index.js";
+import { parseMarkdown } from "../src/render/parse.js";
+
+const GALLERY = fileURLToPath(new URL("../examples/gallery.md", import.meta.url));
+
+/** Render a snippet to its document body and fail loudly on any diagnostic. */
+const body = (md) => {
+  const source = /^---/.test(md) ? md : `---\ntitle: T\n---\n\n${md}\n`;
+  const { doc, errors } = parseMarkdown(source, { file: "t.md" });
+  assert.deepEqual(errors, [], JSON.stringify(errors));
+  return renderBody(doc);
+};
+
+/* ------------------------------------------------------------------ shell */
+
+test("the byline is a date pill with a calendar glyph, an author and a status dot", () => {
+  const html = byline({ title: "T", date: "Sep 22, 2026", byline: "Aryan Saini", status: "Draft v3" });
+  assert.match(html, /<div class="byline">/);
+  assert.match(html, /<svg viewBox="0 0 16 16"[\s\S]*?<\/svg>Sep 22, 2026<\/span>/);
+  assert.match(html, /<span class="chip">@Aryan Saini<\/span>/);
+  assert.match(html, /<span class="chip good"><span class="dot"><\/span>Draft v3<\/span>/);
+  assert.equal((html.match(/class="sep"/g) ?? []).length, 2);
+
+  // The dot takes its colour from the words, so a blocked document reads as blocked.
+  assert.match(byline({ title: "T", status: "Blocked on review" }), /class="chip critical"/);
+  assert.match(byline({ title: "T", status: "At risk" }), /class="chip warn"/);
+  assert.equal(byline({ title: "T" }), "");
+});
+
+test("the contents strip is built from the h2 blocks, and needs at least two", () => {
+  const { doc } = parseMarkdown("# T\n\n## First one\n\ntext\n\n### Deeper\n\n## Second one\n", { file: "t.md" });
+  assert.equal(
+    contents(doc.blocks),
+    '<div class="contents"><a href="#first-one">First one</a><a href="#second-one">Second one</a></div>',
+  );
+  const { doc: one } = parseMarkdown("# T\n\n## Only one\n\ntext\n", { file: "t.md" });
+  assert.equal(contents(one.blocks), "");
+});
+
+test("the generator is stamped into the head", () => {
+  const { html } = render("# T\n\nLead.\n", { file: "t.md" });
+  assert.match(html, /<meta name="generator" content="postplan-render \d+\.\d+\.\d+">/);
+  assert.match(GENERATOR, /^postplan-render /);
+});
+
+test("a document with no fences renders as prose in the shell", () => {
+  const { html, errors } = render("# Memo\n\nThe answer first.\n\nThen the reasoning.\n", { file: "memo.md" });
+  assert.deepEqual(errors, []);
+  assert.match(html, /<h1>Memo<\/h1>/);
+  assert.match(html, /<p class="lead">The answer first\.<\/p>/);
+  assert.match(html, /<p>Then the reasoning\.<\/p>/);
+  assert.doesNotMatch(html, /class="contents"/);
+});
+
+/* ------------------------------------------------------------------ blocks */
+
+test("a callout keeps its tone class and its title as the tag", () => {
+  const html = body("> [!warn] Risk\n> Presigns expire in 120 seconds.\n");
+  assert.match(html, /<div class="note warn"><span class="tag">Risk<\/span>/);
+  assert.match(html, /Presigns expire in 120 seconds\./);
+  assert.match(body("> [!note] Note\n> Plain.\n"), /<div class="note"><span class="tag">Note<\/span>/);
+});
+
+test("table cells carry their alignment and tone classes, inside a scroll wrapper", () => {
+  const html = body([
+    "| Stage | Owner | p50 | p95 | Error rate |",
+    "|:---|:---|---:|---:|---:|",
+    "| Validate | Aryan | 18 | 41 | good:0.2% |",
+    "| Serve | Aryan | 96 | 1,340 | bad:4.8% |",
+  ].join("\n"));
+  assert.match(html, /<div class="tbl-wrap"><table class="full">/);
+  assert.match(html, /<td class="num t-good">0\.2%<\/td>/);
+  assert.match(html, /<td class="num t-bad">4\.8%<\/td>/);
+
+  // Three columns is a narrow table, so it sizes to its content instead.
+  const narrow = body("| a | b | c |\n|:---|:---:|---:|\n| 1 | 2 | 3 |\n");
+  assert.match(narrow, /<div class="tbl-wrap"><table>/);
+  assert.match(narrow, /<td class="center">2<\/td>/);
+});
+
+test("a task list renders checkbox items and leaves plain items alone", () => {
+  const html = body("- [ ] An open task\n- [x] A finished task\n");
+  assert.match(html, /<ul class="tasks">/);
+  assert.match(html, /<li><span class="box"><\/span><span>An open task<\/span><\/li>/);
+  assert.match(html, /<li class="done"><span class="box"><\/span><span>A finished task<\/span><\/li>/);
+});
+
+test('an image titled "zoom" becomes a figure linked to a lightbox overlay', () => {
+  const html = body('![Dashboard](https://example.test/d.png "zoom")\n');
+  assert.match(html, /<figure class="img"><a class="zoom" href="#lb-1"><img src="https:\/\/example\.test\/d\.png" alt="Dashboard"><\/a><figcaption>Dashboard<\/figcaption><\/figure>/);
+  assert.match(html, /<div class="lightbox" id="lb-1"><a href="#_"><img src="https:\/\/example\.test\/d\.png" alt="Dashboard"><\/a><div class="cap">Dashboard<\/div><\/div>/);
+  // The overlay is lifted out of the paragraph and sits at the end of the document.
+  assert.ok(html.indexOf('class="lightbox"') > html.indexOf('class="zoom"'));
+  assert.doesNotMatch(html, /data-zoom/);
+
+  // An untitled image stays inline prose.
+  const plain = body("Text.\n\n![Plain](https://example.test/p.png)\n");
+  assert.match(plain, /<p><img src="https:\/\/example\.test\/p\.png" alt="Plain"><\/p>/);
+  assert.doesNotMatch(plain, /lightbox/);
+});
+
+test("a slideshow gets a snap track, anchored dots and a count", () => {
+  const html = body('```slides\n[{"src":"https://e.test/1.png","caption":"List"},{"src":"https://e.test/2.png","caption":"Detail"}]\n```\n');
+  assert.match(html, /<div class="slides"><div class="track">/);
+  assert.match(html, /<figure id="slides-1-1"><img src="https:\/\/e\.test\/1\.png" alt="List" loading="lazy"><figcaption>1 · List<\/figcaption><\/figure>/);
+  assert.match(html, /<div class="dots"><a href="#slides-1-1" aria-label="Slide 1"><\/a><a href="#slides-1-2" aria-label="Slide 2"><\/a><\/div>/);
+  assert.match(html, /<div class="count">2 slides<\/div>/);
+});
+
+test("a video is a figure with a poster and a typed source", () => {
+  const html = body('```video\n{"src":"https://e.test/c.webm","poster":"https://e.test/p.png","caption":"Upload flow, 0:42"}\n```\n');
+  assert.match(html, /<figure class="img"><video controls preload="metadata" poster="https:\/\/e\.test\/p\.png">/);
+  assert.match(html, /<source src="https:\/\/e\.test\/c\.webm" type="video\/webm">/);
+  assert.match(html, /<figcaption>Upload flow, 0:42<\/figcaption>/);
+});
+
+test("footnotes render as a numbered list at the end, linked both ways", () => {
+  const html = body("Body copy.[^a]\n\nMore.[^b]\n\n[^a]: The first note.\n[^b]: The second note.\n");
+  assert.match(html, /<sup class="fn"><a id="fnref-1" href="#fn-1">1<\/a><\/sup>/);
+  assert.match(html, /<hr><ol class="footnotes"><li id="fn-1">The first note\.<a class="fn-back" href="#fnref-1"/);
+  assert.match(html, /<li id="fn-2">The second note\./);
+  assert.ok(html.indexOf('class="footnotes"') > html.indexOf("More."));
+});
+
+test("stat tiles and hero stats format their value and split the delta", () => {
+  const tiles = body('```stats\n[{"k":"Documents published","v":1284,"format":"int","delta":"+18.4% vs August","tone":"good"},\n {"k":"Largest document","v":486,"format":"int","delta":"95% of the cap"}]\n```\n');
+  assert.match(tiles, /<div class="stats"><div class="stat"><div class="k">Documents published<\/div><div class="v">1,284<\/div>/);
+  assert.match(tiles, /<div class="d"><b class="up">\+18\.4%<\/b> vs August<\/div>/);
+  // No tone means no direction to signal, so the whole line stays muted.
+  assert.match(tiles, /<div class="d">95% of the cap<\/div>/);
+
+  const hero = body('```hero\n[{"k":"Net burn","v":412000,"format":"usd","as":"Aug 2026","delta":"−6.0% vs July","tone":"good"}]\n```\n');
+  assert.match(hero, /<div class="hero"><div class="k">Net burn<\/div><div class="v">\$412k<\/div><div class="as">Aug 2026<\/div>/);
+});
+
+test("a timeline marks done and current entries", () => {
+  const html = body('```timeline\n[{"when":"Aug 12","what":"Forked postplan","state":"done","note":"Vendored unmodified."},\n {"when":"Sep 22","what":"This page","state":"now"},\n {"when":"Next","what":"Fold into the skill"}]\n```\n');
+  assert.match(html, /<li class="done"><span class="when">Aug 12<\/span><div class="what">Forked postplan<\/div><p>Vendored unmodified\.<\/p><\/li>/);
+  assert.match(html, /<li class="now">/);
+  assert.match(html, /<li><span class="when">Next<\/span>/);
+});
+
+test("containers and html fences pass through as the classes the shell styles", () => {
+  assert.match(body("::: subtext\nSecondary text.\n:::\n"), /<div class="subtext">\s*<p>Secondary text\.<\/p>/);
+  assert.match(body('```html\n<div class="mocks">A</div>\n```\n'), /<div class="mocks">A<\/div>/);
+});
+
+/* ------------------------------------------------------------------ assembly */
+
+test("a data fence can load its rows from a file beside the document", () => {
+  const dir = mkdtempSync(join(tmpdir(), "postplan-src-"));
+  writeFileSync(join(dir, "rows.json"), JSON.stringify({ labels: ["Apr"], values: [61] }));
+  const md = '---\ntitle: T\n---\n\nLead.\n\n```chart columns\n{"title":"Published","src":"rows.json"}\n```\n';
+
+  const ok = render(md, { file: join(dir, "plan.md") });
+  assert.deepEqual(ok.errors, []);
+  const chart = ok.doc.blocks.find((b) => b.type === "chart");
+  assert.deepEqual(chart.data, { title: "Published", labels: ["Apr"], values: [61] });
+
+  const missing = render(md.replace("rows.json", "nope.json"), { file: join(dir, "plan.md") });
+  assert.equal(missing.html, null);
+  assert.equal(missing.errors.length, 1);
+  assert.equal(missing.errors[0].block, "chart columns");
+  assert.equal(missing.errors[0].line, 7); // the line of the opening fence
+  assert.match(missing.errors[0].message, /data src "nope\.json": ENOENT/);
+});
+
+test("the assembled document is re-checked by the upload policy", () => {
+  const { html, errors } = render('---\ntitle: T\n---\n\nLead.\n\n```html\n<iframe src="https://example.test"></iframe>\n```\n', { file: "t.md" });
+  assert.equal(html, null);
+  assert.ok(errors.some((e) => e.block === "document" && /<iframe>/.test(e.message)), JSON.stringify(errors));
+});
+
+test("examples/gallery.md renders with no errors", () => {
+  const { html, errors } = render(readFileSync(GALLERY, "utf8"), { file: GALLERY });
+  assert.deepEqual(errors, [], JSON.stringify(errors, null, 2));
+  assert.match(html, /<title>Postplan component gallery<\/title>/);
+  assert.match(html, /<div class="contents">/);
+  assert.match(html, /<ul class="sources">/);
+  assert.ok(Buffer.byteLength(html) < 100 * 1024, "the gallery stays under 100 KB");
+});
+
+test("an unknown block type renders nothing rather than half a block", () => {
+  assert.equal(renderBlock({ id: "x", line: 1, type: "nope" }), "");
+});
