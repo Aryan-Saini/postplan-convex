@@ -61,10 +61,11 @@ export function validateDoc(doc, opts = {}) {
   for (const block of doc.blocks) {
     if (!block || typeof block !== "object") continue;
 
-    // A data fence whose JSON failed to parse arrives as `null`; parse.js has
-    // already reported the syntax error at the offending byte, so re-reporting
-    // the shape here would double every typo.
-    const skipBody = "data" in block && block.data === null;
+    // A data fence whose JSON failed to parse is marked `broken` by parse.js,
+    // which has already reported the syntax error at the offending byte;
+    // re-reporting the shape here would double every typo. A body that is a
+    // literal `null` is not broken, and is still the author's mistake to hear.
+    const skipBody = block.broken === true;
 
     if (typeof block.id === "string" && block.id) {
       if (ids.has(block.id)) {

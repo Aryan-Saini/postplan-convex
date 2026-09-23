@@ -24,8 +24,10 @@
 
 /**
  * Fields every block carries. `line` is the 1-based source line the block
- * starts on; for a fence that is the line of the opening ``` .
- * @typedef {{ id: string, line: number }} BlockBase
+ * starts on; for a fence that is the line of the opening ``` . `broken` marks a
+ * data fence whose JSON did not parse: the syntax error is already reported, so
+ * validation skips its body rather than reporting the shape twice.
+ * @typedef {{ id: string, line: number, broken?: true }} BlockBase
  */
 
 /** Prose already rendered to inline HTML. `lead` marks the opening paragraph.

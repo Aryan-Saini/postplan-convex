@@ -2,22 +2,22 @@
  * Block IR -> HTML.
  *
  * One function per block kind, all of them pure string builders over the classes
- * `shell.js` defines. Charts, code, diagrams and math are not rendered here: they
- * come in through `deps.js`, which resolves to WP4's modules (or, until those
- * land, to `_stubs.js`).
+ * `shell.js` defines. Charts, code, diagrams and math are drawn by `charts.js`,
+ * `code.js`, `diagram.js` and `math.js`, which this module only dispatches to.
  *
- * The markdown blocks WP1 hands over are already HTML, so prose needs three
- * rewrites on the way out: inline math spans become MathML, tables gain their
- * scroll wrapper, and an image titled `zoom` becomes a lightbox figure.
+ * The markdown blocks WP1 hands over are already HTML, so prose needs four
+ * rewrites on the way out: inline math spans and display-math placeholders
+ * become MathML, tables gain their scroll wrapper, and an image titled `zoom`
+ * becomes a lightbox figure.
  *
  * @module render/blocks
  */
 
 import { escapeHtml } from "./parse.js";
-import {
-  meter, renderChart, renderCode, renderDiff, renderFlow, renderInlineMath,
-  renderMathBlock, renderSequence, sparkline,
-} from "./deps.js";
+import { meter, renderChart, sparkline } from "./charts.js";
+import { renderCode, renderDiff } from "./code.js";
+import { renderFlow, renderSequence } from "./diagram.js";
+import { renderInlineMath, renderMathBlock, unescapeHtml } from "./math.js";
 
 /** @typedef {import("./ir.js").Block} Block */
 /** @typedef {import("./ir.js").Doc} Doc */
@@ -150,15 +150,25 @@ export function renderBlock(block, ctx = newCtx()) {
 
 /* ------------------------------------------------------------------ prose */
 
-/** Markdown HTML from WP1, with the three rewrites the shell needs. */
+/** Markdown HTML from the parser, with the four rewrites the shell needs. */
 function prose(block, ctx) {
   let html = renderInlineMath(block.html);
+  html = fillMathBlocks(html);
   html = wrapTables(html);
   html = zoomFigures(html, ctx);
   if (block.lead) html = html.replace(/^<p>/, '<p class="lead">');
   // The list under a "Sources" heading is the provenance list, not body copy.
   if (ctx.heading === "sources") html = html.replace(/^<ul>/, '<ul class="sources">');
   return html;
+}
+
+// A `$$…$$` formula inside a paragraph group reaches us as an empty placeholder
+// carrying the escaped TeX, the same way inline math does.
+const MATH_BLOCK_PLACEHOLDER = /<div class="math-block" data-tex="([^"]*)"><\/div>/g;
+
+/** Replace every display-math placeholder in prose HTML with its MathML. */
+function fillMathBlocks(html) {
+  return html.replace(MATH_BLOCK_PLACEHOLDER, (_m, attr) => renderMathBlock(unescapeHtml(attr)));
 }
 
 /**
@@ -208,7 +218,10 @@ function stats(block) {
   const tiles = items.map((it) => {
     const parts = [`<div class="k">${escapeHtml(it.k ?? "")}</div>`, `<div class="v">${value(it)}</div>`];
     if (it.delta) parts.push(`<div class="d">${delta(it)}</div>`);
-    if (Array.isArray(it.spark)) parts.push(sparkline(it.spark, { color: sparkColor(it.tone) }));
+    // `normalize` fills `spark: []` on every tile, and a line needs two points.
+    if (Array.isArray(it.spark) && it.spark.length >= 2) {
+      parts.push(sparkline(it.spark, { color: sparkColor(it.tone) }));
+    }
     if (it.meter) parts.push(meter(Number(it.v), { max: Number(it.meter.max), tone: "#fab219" }));
     return `<div class="stat">${parts.join("")}</div>`;
   });

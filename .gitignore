@@ -5,3 +5,4 @@ convex/_generated
 .claude/skills/convex*
 .agents/skills/convex*
 skills-lock.json
+out/

@@ -35,6 +35,15 @@ export const SERIES = [
 const GOOD = "#0ca30c";
 const BAD = "#d03b3b";
 
+/**
+ * The grammar's tone words (`good` `warn` `bad` `flat`) as ink. A document names
+ * a tone, never a hex, so every renderer that paints one resolves it here.
+ */
+export const TONE_INK = { good: GOOD, warn: "#c98500", bad: BAD, flat: "#6f6f6a" };
+
+/** Resolve a tone word to ink, falling back to `otherwise` when none is set. */
+export const toneInk = (tone, otherwise) => TONE_INK[tone] ?? (tone || otherwise);
+
 /** Mix a hex colour toward the surface. `t` = 0 is the surface, 1 is the colour. */
 export function mix(hex, t, surface = "#0b0b0b") {
   const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
@@ -184,7 +193,7 @@ export function columns(rows, {
   rows.forEach((r, i) => {
     const cx = g.x0 + band * (i + 0.5);
     const y = yOf(r.value);
-    const fill = r.tone ?? color;
+    const fill = toneInk(r.tone, color);
     body += `<path d="${cappedBar(cx - bw / 2, y, bw, g.y1 - y)}" fill="${fill}">` +
       `<title>${esc(r.label)}: ${esc(format(r.value))}</title></path>`;
     if (labelBars) {
@@ -208,7 +217,7 @@ export function bars(rows, { title = "", note = "", format = (v) => compact(v), 
     const y = g.y0 + i * rowH;
     const w = ((r.value / top) * (g.x1 - g.x0)) || 0;
     body += `<text x="${n(labelW - 12)}" y="${n(y + 18)}" class="tick tick-y">${esc(r.label)}</text>`;
-    body += `<path d="${hBar(g.x0, y + 5, w, 18)}" fill="${r.tone ?? color}">` +
+    body += `<path d="${hBar(g.x0, y + 5, w, 18)}" fill="${toneInk(r.tone, color)}">` +
       `<title>${esc(r.label)}: ${esc(format(r.value))}</title></path>`;
     body += `<text x="${n(g.x0 + w + 8)}" y="${n(y + 18)}" class="val val-left">${esc(format(r.value))}</text>`;
   });
@@ -591,7 +600,7 @@ export function schedule(tasks, { title = "", note = "" } = {}) {
     const w = Math.max(4, xOf(Date.parse(t.end)) - x);
     body += `<text x="${n(labelW - 12)}" y="${n(y + 17)}" class="tick tick-y">${esc(t.label)}</text>`;
     body += `<rect x="${n(x)}" y="${n(y + 5)}" width="${n(w)}" height="16" rx="4" ` +
-      `fill="${t.tone ?? (t.done ? GOOD : SERIES[0])}" fill-opacity="${t.done ? 0.9 : 0.75}">` +
+      `fill="${toneInk(t.tone, t.done ? GOOD : SERIES[0])}" fill-opacity="${t.done ? 0.9 : 0.75}">` +
       `<title>${esc(t.label)}: ${esc(t.start)} to ${esc(t.end)}</title></rect>`;
   });
   return frame(svgOpen(W, H, title || "schedule") + body + "</svg>", title, note);

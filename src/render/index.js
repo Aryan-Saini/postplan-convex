@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 import { validateHtml } from "../html-policy.js";
 import { renderBody } from "./blocks.js";
-import { normalize, validateDoc } from "./deps.js";
+import { normalize, validateDoc } from "./schema/index.js";
 import { escapeHtml, parseInfo, parseIr, parseMarkdown, slugify, splitFrontmatter } from "./parse.js";
 import { page } from "./shell.js";
 

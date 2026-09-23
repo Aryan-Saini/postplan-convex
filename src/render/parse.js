@@ -484,11 +484,14 @@ function fenceBlock(token, line, file, errors, nextId) {
   }
   if (DATA_FENCE_SET.has(kind)) {
     const label = kind === "chart" ? `chart ${info.words[0] ?? ""}`.trim() : kind;
-    const data = parseJsonBody(source, line, file, label, errors);
+    const { data, broken } = parseJsonBody(source, line, file, label, errors);
+    // `broken` separates "the JSON did not parse" (already reported, so the
+    // schema stays quiet) from an authored literal `null`, which it should flag.
+    const flag = broken ? { broken: true } : {};
     if (kind === "chart") {
-      return [{ id: nextId("chart", id), type: "chart", line, kind: info.words[0] ?? "", info: info.raw, data }];
+      return [{ id: nextId("chart", id), type: "chart", line, kind: info.words[0] ?? "", info: info.raw, data, ...flag }];
     }
-    return [{ id: nextId(kind, id), type: /** @type {"stats"} */ (kind), line, info: info.raw, data }];
+    return [{ id: nextId(kind, id), type: /** @type {"stats"} */ (kind), line, info: info.raw, data, ...flag }];
   }
 
   /** @type {import("./ir.js").CodeBlock} */
@@ -503,16 +506,17 @@ function fenceBlock(token, line, file, errors, nextId) {
  * JSON body of a data fence. On failure the error is reported at the source line
  * the JSON position maps to, not at the fence, so the message points at the byte.
  *
- * @returns {unknown} the parsed value, or `null` when the body is not JSON
+ * @returns {{ data: unknown, broken: boolean }} `broken` marks a body that did
+ *   not parse, so the schema can skip it without also excusing a literal `null`.
  */
 function parseJsonBody(source, fenceLine, file, block, errors) {
   try {
-    return JSON.parse(source);
+    return { data: JSON.parse(source), broken: false };
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
     const inner = countLines(source.slice(0, jsonErrorOffset(raw, source)));
     errors.push({ file, line: fenceLine + 1 + inner, block, message: raw.replace(/\s+/g, " ") });
-    return null;
+    return { data: null, broken: true };
   }
 }
 

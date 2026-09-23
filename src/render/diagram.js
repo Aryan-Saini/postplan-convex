@@ -9,6 +9,8 @@
  * @module render/diagram
  */
 
+import { toneInk } from "./charts.js";
+
 /** @typedef {import("./ir.js").FlowBlock} FlowBlock */
 /** @typedef {import("./ir.js").SequenceBlock} SequenceBlock */
 
@@ -58,7 +60,8 @@ export function flow(cols, edges, { title = "", note = "", colW = 168, rowH = 74
     }
   }
   for (const { x, y, w, h, node } of pos.values()) {
-    const tone = node.tone ?? "#2a2a27";
+    // A node names a tone word, not a colour, and an absent one normalizes to "".
+    const tone = toneInk(node.tone, "#2a2a27");
     if (node.shape === "diamond") {
       const cx = x + w / 2, cy = y + h / 2;
       body += `<path d="M${n(cx)},${n(y - 6)} L${n(x + w)},${n(cy)} L${n(cx)},${n(y + h + 6)} L${n(x)},${n(cy)} Z" ` +

@@ -162,7 +162,11 @@ test("a data fence can load its rows from a file beside the document", () => {
   const ok = render(md, { file: join(dir, "plan.md") });
   assert.deepEqual(ok.errors, []);
   const chart = ok.doc.blocks.find((b) => b.type === "chart");
-  assert.deepEqual(chart.data, { title: "Published", labels: ["Apr"], values: [61] });
+  // `normalize` has already filled the chart envelope, so only the authored keys
+  // and the loaded rows are asserted here.
+  const { title, labels, values } = chart.data;
+  assert.deepEqual({ title, labels, values }, { title: "Published", labels: ["Apr"], values: [61] });
+  assert.equal("src" in chart.data, false);
 
   const missing = render(md.replace("rows.json", "nope.json"), { file: join(dir, "plan.md") });
   assert.equal(missing.html, null);
@@ -172,10 +176,13 @@ test("a data fence can load its rows from a file beside the document", () => {
   assert.match(missing.errors[0].message, /data src "nope\.json": ENOENT/);
 });
 
-test("the assembled document is re-checked by the upload policy", () => {
+test("html a document could not upload is rejected, at the fence that wrote it", () => {
   const { html, errors } = render('---\ntitle: T\n---\n\nLead.\n\n```html\n<iframe src="https://example.test"></iframe>\n```\n', { file: "t.md" });
   assert.equal(html, null);
-  assert.ok(errors.some((e) => e.block === "document" && /<iframe>/.test(e.message)), JSON.stringify(errors));
+  // The schema runs the upload policy over each html fence, so the diagnostic
+  // carries the fence's line instead of pointing at the whole document. The
+  // document-level re-check in `render` still stands behind it.
+  assert.ok(errors.some((e) => e.block === "html" && e.line === 7 && /<iframe>/.test(e.message)), JSON.stringify(errors));
 });
 
 test("examples/gallery.md renders with no errors", () => {
