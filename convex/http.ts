@@ -302,6 +302,48 @@ http.route({
   }),
 });
 
+/**
+ * The sandbox for served drafts, enforced by the browser.
+ *
+ * The upload policy (`src/html-policy.js`) allows inline classic `<script>`, so the
+ * CSP has to keep `script-src 'unsafe-inline'` -- a draft's own scripts still run.
+ * What it takes away is everything that script could reach out with: `connect-src
+ * 'none'` kills fetch/XHR/WebSocket/beacon, `frame-src`/`frame-ancestors 'none'`
+ * stops it framing anything or being framed, `form-action 'none'` stops posts,
+ * `worker-src 'none'` stops workers, and `base-uri 'none'` stops base-tag
+ * retargeting. Images, media and fonts are the only remote loads left.
+ *
+ * What it does NOT do: it cannot block same-origin DOM or storage APIs, so a draft
+ * can still read and write `localStorage`/`sessionStorage`/cookies for this origin,
+ * and it does nothing at all for non-browser clients like curl -- the bytes are
+ * served verbatim either way.
+ *
+ * This covers `/d/` only. The `/u/` and `/s/` pages are our own HTML, not uploaded
+ * HTML, and they need cross-origin fetch, PUT and framing against S3, so they are
+ * deliberately left out of it.
+ */
+const CSP = [
+  "default-src 'none'",
+  "img-src https: data:",
+  "media-src https: data:",
+  "style-src 'unsafe-inline'",
+  "font-src data:",
+  "script-src 'unsafe-inline'",
+  "connect-src 'none'",
+  "frame-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'none'",
+  "base-uri 'none'",
+  "worker-src 'none'",
+].join("; ");
+
+/** Headers for the uploaded HTML we serve from this origin: the sandbox above, plus no sniffing. */
+const htmlSecurityHeaders = {
+  "Content-Security-Policy": CSP,
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
+} as const;
+
 /** The published document. Serving it here keeps the URL stable across versions. */
 async function serveDraft(ctx: any, request: Request, raw: boolean): Promise<Response> {
   const path = new URL(request.url).pathname;
@@ -312,7 +354,10 @@ async function serveDraft(ctx: any, request: Request, raw: boolean): Promise<Res
   if (!found) {
     return new Response("<!doctype html><meta charset=utf-8><title>Not found</title>"
       + "<body style='background:#000;color:#888;font:16px system-ui;padding:48px'>No such draft.",
-      { status: 404, headers: { "Content-Type": "text/html; charset=utf-8" } });
+      {
+        status: 404,
+        headers: { "Content-Type": "text/html; charset=utf-8", ...htmlSecurityHeaders },
+      });
   }
   const config = s3Config();
   const upstream = await fetch(await presign(config, "GET", found.version.key, 120));
@@ -323,6 +368,8 @@ async function serveDraft(ctx: any, request: Request, raw: boolean): Promise<Res
       "Content-Type": raw ? "text/plain; charset=utf-8" : "text/html; charset=utf-8",
       "Cache-Control": "private, max-age=30",
       "X-Postplan-Version": String(found.version.versionNumber),
+      // /raw is plain text and is never rendered, so it needs nosniff but no CSP.
+      ...(raw ? { "X-Content-Type-Options": "nosniff" } : htmlSecurityHeaders),
     },
   });
 }
