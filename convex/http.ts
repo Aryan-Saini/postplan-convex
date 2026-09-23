@@ -2,7 +2,7 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { validateHtml } from "../src/html-policy.js";
-import { draftKey, presign, s3Config } from "./lib/s3";
+import { draftKey, presign, s3Config, s3Host } from "./lib/s3";
 import { uploadPage } from "./lib/uploadPage";
 import { downloadPage } from "./lib/downloadPage";
 
@@ -255,8 +255,38 @@ http.route({
   }),
 });
 
+/**
+ * The sandbox for our own two file pages.
+ *
+ * Same shape as the draft CSP below, with one deliberate hole: `connect-src` names
+ * this origin (the sign and record calls) and the S3 bucket host derived from
+ * `s3Config()` at request time, because the upload page PUTs bytes straight to S3
+ * and the download page fetches text files to preview them. `blob:` is in `img-src`
+ * and `media-src` so a picked file can be shown before it is sent. Everything else
+ * is off: no frames in either direction, no forms, no workers, no base retargeting.
+ * `frame-src 'none'` is why the PDF preview is a panel and not an iframe.
+ */
+const filePageCsp = (): string =>
+  [
+    "default-src 'none'",
+    "img-src https: data: blob:",
+    "media-src https: data: blob:",
+    "style-src 'unsafe-inline'",
+    "font-src data:",
+    "script-src 'unsafe-inline'",
+    `connect-src 'self' https://${s3Host(s3Config())}`,
+    "frame-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'none'",
+    "base-uri 'none'",
+    "worker-src 'none'",
+  ].join("; ");
+
 const filePageHeaders = () => ({
   "Content-Type": "text/html; charset=utf-8",
+  "Content-Security-Policy": filePageCsp(),
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
 });
 
 /** A dead link or an expired one: same plain page, same headers. */
