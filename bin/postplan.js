@@ -182,14 +182,32 @@ program
 function renderFile(source) {
   if (!fs.existsSync(source)) throw new CliError(`File does not exist: ${source}`);
   const text = fs.readFileSync(source, "utf8");
-  const input = path.extname(source).toLowerCase() === ".json" ? JSON.parse(text) : text;
+  const input = path.extname(source).toLowerCase() === ".json" ? parseJson(text, source) : text;
 
   const result = render(input, { file: source });
   if (result.errors.length) {
-    for (const error of result.errors) console.error(formatError(error));
+    // Sorted by line so the list reads down the document, whichever stage of the
+    // pipeline found each problem.
+    for (const error of [...result.errors].sort((a, b) => a.line - b.line)) console.error(formatError(error));
     process.exit(1);
   }
   return result;
+}
+
+/**
+ * `JSON.parse` for an IR input, reported the way every other diagnostic is:
+ * `plan.json:12 invalid JSON: …`, not a raw stack trace.
+ */
+function parseJson(text, source) {
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const at = /at position (\d+)/.exec(message);
+    const line = at ? text.slice(0, Number(at[1])).split("\n").length : 1;
+    const reason = message.replace(/,?\s*(?:\.\.\.)?"[\s\S]*"(?:\.\.\.)?\s*is not valid JSON/, "").trim();
+    throw new CliError(`${source}:${line} invalid JSON: ${reason || "not valid JSON"}`);
+  }
 }
 
 /** Swap a path's extension, so `plan.md` becomes `plan.html`. */

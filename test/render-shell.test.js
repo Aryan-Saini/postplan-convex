@@ -140,6 +140,22 @@ test("stat tiles and hero stats format their value and split the delta", () => {
   assert.match(hero, /<div class="hero"><div class="k">Net burn<\/div><div class="v">\$412k<\/div><div class="as">Aug 2026<\/div>/);
 });
 
+test("a tile meter takes its colour from its tone", () => {
+  const of = (tone) =>
+    body(`\`\`\`stats\n[{"k":"Cap","v":80,"meter":{"max":100${tone}}}]\n\`\`\`\n`);
+  // No tone keeps the default amber; a named tone and a literal colour both land.
+  assert.match(of(""), /class="meter-fill" style="width:80%;background:#fab219"/);
+  assert.match(of(',"tone":"bad"'), /class="meter-fill" style="width:80%;background:#d03b3b"/);
+  assert.match(of(',"tone":"#123456"'), /class="meter-fill" style="width:80%;background:#123456"/);
+});
+
+test("a heading keeps its inline marks, and its id stays the plain text", () => {
+  const html = body("## The `upload` path is **fast**\n\n## Second\n");
+  assert.match(html, /<h2 id="the-upload-path-is-fast">The <code>upload<\/code> path is <strong>fast<\/strong><\/h2>/);
+  // The contents strip links the plain text, so no markup leaks into it.
+  assert.match(html, /<a href="#the-upload-path-is-fast">The upload path is fast<\/a>/);
+});
+
 test("a timeline marks done and current entries", () => {
   const html = body('```timeline\n[{"when":"Aug 12","what":"Forked postplan","state":"done","note":"Vendored unmodified."},\n {"when":"Sep 22","what":"This page","state":"now"},\n {"when":"Next","what":"Fold into the skill"}]\n```\n');
   assert.match(html, /<li class="done"><span class="when">Aug 12<\/span><div class="what">Forked postplan<\/div><p>Vendored unmodified\.<\/p><\/li>/);

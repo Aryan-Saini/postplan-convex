@@ -34,7 +34,9 @@
  * @typedef {BlockBase & { type: "markdown", html: string, lead?: true }} MarkdownBlock */
 
 /** Emitted separately from prose so the contents strip can be built without re-parsing.
- * @typedef {BlockBase & { type: "heading", level: HeadingLevel, text: string, slug: string }} HeadingBlock */
+ * `html` is the heading with its inline marks rendered; `text` is the same run
+ * as plain text, which is what `slug` and the contents strip use.
+ * @typedef {BlockBase & { type: "heading", level: HeadingLevel, text: string, html?: string, slug: string }} HeadingBlock */
 
 /** @typedef {BlockBase & { type: "callout", tone: CalloutTone, title: string, html: string }} CalloutBlock */
 

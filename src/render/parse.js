@@ -31,6 +31,22 @@ export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
 }
 
+const ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" };
+
+/**
+ * The visible text of an inline HTML run: tags dropped, the escapes `marked`
+ * writes decoded. A heading's id and its contents-strip label come from this,
+ * so `## The <code>api</code>` does not slug as "the-code-api-code".
+ *
+ * @param {string} html
+ * @returns {string}
+ */
+export function textOf(html) {
+  return String(html)
+    .replace(/<[^>]*>/g, "")
+    .replace(/&(amp|lt|gt|quot|#39);/g, (_, name) => ENTITIES[name]);
+}
+
 /** GitHub-style anchor slug; used for heading ids and the contents strip. */
 export function slugify(text) {
   return String(text)
@@ -47,16 +63,21 @@ export function slugify(text) {
  * Split a leading `---` block. Flat `key: value`, strings only, first colon wins:
  * no YAML library, so a date or a colon in a title cannot change the parse.
  *
+ * `lines` holds the source line each key was written on, so a complaint about a
+ * key points at that key rather than at the top of the file.
+ *
  * @param {string} text
- * @returns {{ meta: Record<string, string>, body: string, bodyLine: number, errors: {line: number, message: string}[] }}
+ * @returns {{ meta: Record<string, string>, lines: Record<string, number>, body: string, bodyLine: number, errors: {line: number, message: string}[] }}
  */
 export function splitFrontmatter(text) {
   /** @type {Record<string, string>} */
   const meta = {};
+  /** @type {Record<string, number>} */
+  const lines = {};
   /** @type {{line: number, message: string}[]} */
   const errors = [];
   const m = /^---[ \t]*\r?\n([\s\S]*?)\r?\n?---[ \t]*(?:\r?\n|$)/.exec(text);
-  if (!m) return { meta, body: text, bodyLine: 1, errors };
+  if (!m) return { meta, lines, body: text, bodyLine: 1, errors };
 
   m[1].split(/\r?\n/).forEach((raw, i) => {
     const line = i + 2; // line 1 is the opening ---
@@ -72,9 +93,10 @@ export function splitFrontmatter(text) {
       return;
     }
     meta[key] = raw.slice(colon + 1).trim();
+    lines[key] = line;
   });
 
-  return { meta, body: text.slice(m[0].length), bodyLine: countLines(m[0]) + 1, errors };
+  return { meta, lines, body: text.slice(m[0].length), bodyLine: countLines(m[0]) + 1, errors };
 }
 
 /** Number of newlines in `s` (i.e. lines consumed). */
@@ -319,11 +341,14 @@ export function parseMarkdown(text, opts = {}) {
   const meta = { title: "" };
   for (const [k, v] of Object.entries(fm.meta)) {
     if (KNOWN_META.has(k)) meta[k] = v;
-    else errors.push({ file, line: 1, block: "frontmatter", message: `unknown frontmatter key "${k}"; keys: title byline date status` });
+    else errors.push({ file, line: fm.lines[k] ?? 1, block: "frontmatter", message: `unknown frontmatter key "${k}"; keys: title byline date status` });
   }
 
   const state = { footnoteOrder: /** @type {string[]} */ ([]) };
   const md = buildMarked(state);
+  // The block-level API renders a run of inline tokens only from inside a
+  // renderer; a parser built from the same options does it from out here.
+  const inline = new md.Parser(md.defaults);
   const tokens = md.lexer(fm.body);
 
   /** @type {Block[]} */
@@ -365,18 +390,22 @@ export function parseMarkdown(text, opts = {}) {
 
     if (token.type === "heading") {
       // The first h1 titles the document; the shell renders it, so it is not a block.
+      // A heading carries inline marks like any other prose: `html` is what the
+      // document shows, `text` is the same run with its tags dropped, which is
+      // what the contents strip and the slug are built from.
+      const html = (token.tokens ? inline.parseInline(token.tokens) : escapeHtml(token.text)).trim();
+      const text = textOf(html);
       if (token.depth === 1 && !titleTaken) {
         titleTaken = true;
         flush();
-        if (!meta.title) meta.title = token.text.trim();
+        if (!meta.title) meta.title = text;
         continue;
       }
       flush();
       leadTaken = true;
-      const text = token.text.trim();
       blocks.push({
         id: nextId("heading"), type: "heading", line,
-        level: /** @type {1|2|3|4|5|6} */ (token.depth), text, slug: slugify(text),
+        level: /** @type {1|2|3|4|5|6} */ (token.depth), text, html, slug: slugify(text),
       });
       continue;
     }

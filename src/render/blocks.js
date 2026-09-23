@@ -123,7 +123,8 @@ export function renderBlock(block, ctx = newCtx()) {
     case "heading": {
       ctx.heading = block.slug;
       const l = Math.min(Math.max(block.level, 1), 6);
-      return `<h${l} id="${escapeHtml(block.slug)}">${escapeHtml(block.text)}</h${l}>`;
+      // An IR written by hand may carry only `text`; marks are optional, escaping is not.
+      return `<h${l} id="${escapeHtml(block.slug)}">${block.html ?? escapeHtml(block.text)}</h${l}>`;
     }
     case "callout": {
       const cls = block.tone === "note" ? "note" : `note ${block.tone}`;
@@ -222,7 +223,7 @@ function stats(block) {
     if (Array.isArray(it.spark) && it.spark.length >= 2) {
       parts.push(sparkline(it.spark, { color: sparkColor(it.tone) }));
     }
-    if (it.meter) parts.push(meter(Number(it.v), { max: Number(it.meter.max), tone: "#fab219" }));
+    if (it.meter) parts.push(meter(Number(it.v), { max: Number(it.meter.max), tone: meterColor(it.meter.tone) }));
     return `<div class="stat">${parts.join("")}</div>`;
   });
   return `<div class="stats">${tiles.join("")}</div>`;
@@ -243,6 +244,11 @@ function hero(block) {
 
 const SPARK_TONES = { good: "#199e70", warn: "#c98500", bad: "#d03b3b", critical: "#d03b3b" };
 const sparkColor = (tone) => SPARK_TONES[tone] ?? "#3987e5";
+
+/** Meter fill colours. A tone may also be given as a literal `#rrggbb`. */
+const METER_TONES = { good: "#199e70", warn: "#fab219", bad: "#d03b3b", critical: "#d03b3b", flat: "#8a8f98" };
+const meterColor = (tone) =>
+  METER_TONES[tone] ?? (typeof tone === "string" && /^#[0-9a-fA-F]{3,8}$/.test(tone) ? tone : "#fab219");
 
 const value = (it) => escapeHtml(format(it.v, it.format));
 

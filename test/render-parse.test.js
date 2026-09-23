@@ -50,6 +50,8 @@ test("unknown frontmatter keys are an error, not a silent drop", () => {
   assert.equal(doc.meta.title, "T");
   assert.equal(errors.length, 1);
   assert.match(errors[0].message, /unknown frontmatter key "colour"/);
+  // The complaint points at the key, not at the top of the file.
+  assert.equal(errors[0].line, 3);
 });
 
 test("the first h1 becomes the title when frontmatter has none", () => {
@@ -70,6 +72,16 @@ test("headings are emitted separately with a slug", () => {
   assert.equal(b.text, "Stage latency, p95");
   assert.equal(b.slug, "stage-latency-p95");
   assert.equal(slugify("  Two   Words! "), "two-words");
+});
+
+test("a heading renders its inline marks and slugs the text under them", () => {
+  const b = only(TITLED("## The `upload` path is **fast**"), "heading");
+  assert.equal(b.html, "The <code>upload</code> path is <strong>fast</strong>");
+  assert.equal(b.text, "The upload path is fast");
+  assert.equal(b.slug, "the-upload-path-is-fast");
+
+  // The same run titles the document when the h1 is the only title there is.
+  assert.equal(clean("# The `upload` path\n\nLead.\n").meta.title, "The upload path");
 });
 
 test("fence info-string grammar: kind, key=value, quoted values, bare flags", () => {

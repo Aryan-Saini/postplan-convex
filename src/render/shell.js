@@ -118,6 +118,7 @@ kbd{font:.85em var(--mono);background:var(--surface-2);border:1px solid var(--li
 .note.good{border-left-color:var(--good)} .note.good .tag{color:var(--good)}
 .note.warn{border-left-color:var(--warn)} .note.warn .tag{color:var(--warn)}
 .note.critical{border-left-color:var(--critical)} .note.critical .tag{color:var(--critical)}
+.math-error{color:var(--critical)}
 
 /* ---- stat tiles ---- */
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:1px;
