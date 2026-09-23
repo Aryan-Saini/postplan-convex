@@ -123,10 +123,6 @@ The upload and download pages (`/u/<slug>`, `/s/<slug>`) are the server's own
 HTML rather than uploaded HTML, and they need cross-origin fetch, PUT and framing
 against S3, so they are not covered by this policy.
 
-## Rendering Markdown
-
-Being added.
-
 ## What changed from upstream
 
 - `express` + `pg` + `@aws-sdk/client-s3` + `jose` are gone; Convex serves the API
