@@ -443,7 +443,7 @@ export function heatmap(rowLabels, colLabels, values, { title = "", note = "", f
       body += `<rect x="${n(labelW + x * (cw + gap))}" y="${n(ty)}" width="${n(cw)}" height="${cell}" rx="3" fill="${fill}">` +
         `<title>${esc(r)} · ${esc(c)}: ${esc(format(v))}</title></rect>`;
       body += `<text x="${n(labelW + x * (cw + gap) + cw / 2)}" y="${n(ty + cell / 2 + 4)}" class="cell-val" ` +
-        `fill="${t > 0.55 ? "#fff" : "#8a8a85"}">${esc(format(v))}</text>`;
+        `fill="#fff">${esc(format(v))}</text>`;
     });
   });
   return frame(svgOpen(W, H, title || "heat map") + body + "</svg>", title, note);
@@ -555,7 +555,7 @@ export function funnel(rows, { title = "", note = "", format = (v) => compact(v)
     body += `<text x="${n(g.x0 + w + 9)}" y="${n(y + 22)}" class="val val-left">${esc(format(r.value))}</text>`;
     if (i) {
       const drop = rows[i - 1].value ? r.value / rows[i - 1].value - 1 : 0;
-      body += `<text x="${n(W - 4)}" y="${n(y + 22)}" class="val" text-anchor="end" fill="#8a8a83">` +
+      body += `<text x="${n(W - 4)}" y="${n(y + 22)}" class="val" text-anchor="end">` +
         `${(drop * 100).toFixed(0)}%</text>`;
     }
   });
@@ -628,7 +628,7 @@ export function smallMultiples(labels, items, {
     const y0 = cy + 18, y1 = cy + 18 + panelH - 22;
     const xOf = (i) => cx + 2 + (i / Math.max(1, item.values.length - 1)) * (pw - 4);
     const yOf = (v) => y1 - (v / top) * (y1 - y0);
-    body += `<text x="${n(cx)}" y="${n(cy + 11)}" class="tick" text-anchor="start" fill="#b4b4ad">${esc(item.label)}</text>`;
+    body += `<text x="${n(cx)}" y="${n(cy + 11)}" class="tick" text-anchor="start">${esc(item.label)}</text>`;
     body += `<line x1="${n(cx)}" y1="${n(y1)}" x2="${n(cx + pw)}" y2="${n(y1)}" class="grid"/>`;
     const d = item.values.map((v, i) => `${i ? "L" : "M"}${n(xOf(i))},${n(yOf(v))}`).join(" ");
     body += `<path d="${d}" fill="none" stroke="${SERIES[0]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;

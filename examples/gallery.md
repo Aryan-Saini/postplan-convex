@@ -62,7 +62,7 @@ Right-aligned, for a sign-off or a total.
 :::
 
 ::: subtext
-Muted 14px secondary text under a paragraph, a table or a figure. Same ink as a caption.
+Secondary text under a paragraph, a table or a figure. White, like every other sentence; it steps down by size, not by colour.
 :::
 
 ::: columns
@@ -290,7 +290,7 @@ npx postplan-aryan@latest upload ./plan.html --description "Q3 warehouse plan"
 ## Images and video
 
 A figure is the image at full column width, corners at 8px, a hairline border, and the caption underneath in
-the muted ink, left aligned, the way the renderer captions an embed with its provenance. A title of `zoom`
+white and left aligned, the way the renderer captions an embed with its provenance. A title of `zoom`
 turns the figure into a lightbox target.
 
 ![Dashboard after the S3 move · captured Sep 21](https://abundant-cardinal-686.convex.site/img/dash.png "zoom")
