@@ -46,6 +46,15 @@ export function s3Config(): S3Config {
   return { accessKeyId, secretAccessKey, bucket, region, prefix };
 }
 
+/**
+ * The virtual-hosted-style host every presigned URL points at. Exported so the
+ * pages that fetch and PUT to it can name it in their `connect-src` without
+ * hardcoding a bucket.
+ */
+export function s3Host(config: S3Config): string {
+  return `${config.bucket}.s3.${config.region}.amazonaws.com`;
+}
+
 /** Percent-encode per RFC 3986; S3 keeps "/" literal in the canonical URI. */
 function encodePath(path: string): string {
   return path
@@ -66,7 +75,7 @@ export async function presign(
   key: string,
   expiresIn: number,
 ): Promise<string> {
-  const host = `${config.bucket}.s3.${config.region}.amazonaws.com`;
+  const host = s3Host(config);
   const now = new Date();
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
   const dateStamp = amzDate.slice(0, 8);
