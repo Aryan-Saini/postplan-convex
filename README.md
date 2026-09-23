@@ -9,9 +9,50 @@ npx postplan-aryan auth set <api-key> --api-url https://<your-deployment>.convex
 npx postplan-aryan upload plan.html
 ```
 
-The CLI is upstream's, unmodified. No deployment is baked into the published
-package: it reads `--api-url`, then `POSTPLAN_API_URL`, then
-`~/.postplan/config.json`. Point it at your own instance.
+No deployment is baked into the published package: the CLI reads `--api-url`,
+then `POSTPLAN_API_URL`, then `~/.postplan/config.json`. Point it at your own
+instance.
+
+## Rendering Markdown
+
+`render` turns a Markdown document into the same self-contained HTML the upload
+endpoint accepts: one file, no script, no webfont, no network call. Charts,
+diagrams and formulas are generated as inline SVG and MathML at render time.
+
+```bash
+npx postplan-aryan render plan.md              # writes plan.html
+npx postplan-aryan upload plan.md              # renders, then publishes
+```
+
+A document is frontmatter, prose, and fences whose info string names a block:
+
+```markdown
+---
+title: Q3 warehouse plan
+byline: Aryan Saini
+status: On track
+---
+
+Pick-to-ship is 41 hours against a 24 hour target, and the gap is all putaway.
+
+## Throughput
+
+​```chart columns
+{"title":"Orders shipped","format":"int",
+ "labels":["Jul","Aug","Sep"],"values":[812,904,1130]}
+​```
+```
+
+`upload plan.md` renders to `plan.html` and publishes that, but remembers the
+draft under `plan.md`, so re-uploading the source keeps the same URL.
+
+`--out <path>` moves the output, `--emit-ir` also writes the block IR as JSON,
+and `render` accepts that JSON back in place of the Markdown. A document that
+does not validate prints one diagnostic per line and writes nothing.
+
+The full grammar — every block kind, its JSON shape, and the error messages —
+lives in the `html-communication` skill's `SKILL.md`. `examples/gallery.md`
+renders one of everything and is the fixture the tests check.
 
 ## Where uploads go
 
