@@ -2,9 +2,10 @@
  * Entry point for `postplan render`: Markdown (or an IR) in, one self-contained
  * HTML document out.
  *
- * The pipeline is parse -> validate -> normalise -> resolve `data.src` files ->
+ * The pipeline is parse -> resolve `data.src` files -> validate -> normalise ->
  * render blocks -> wrap in the shell -> re-run the server's own HTML policy on
- * the assembled document. Every stage appends to one error list and nothing is
+ * the assembled document. Side files are substituted before validation so their
+ * rows are held to the same rules as rows written inline. Every stage appends to one error list and nothing is
  * written when that list is non-empty, so an author sees all of their mistakes
  * at once rather than one per run.
  *
@@ -12,7 +13,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { validateHtml } from "../html-policy.js";
@@ -63,9 +64,12 @@ export function render(input, opts = {}) {
   /** @type {RenderError[]} */
   const errors = [...parsed.errors];
 
-  errors.push(...validateDoc(parsed.doc, { file }));
-  const doc = normalize(parsed.doc) ?? parsed.doc;
-  errors.push(...resolveSources(doc, { file, baseDir }));
+  // Side files are substituted first so the rows they bring are validated like
+  // rows written inline; the authored document is left untouched for `ir`.
+  const resolved = resolveSources(parsed.doc, { file, baseDir });
+  errors.push(...resolved.errors);
+  errors.push(...validateDoc(resolved.doc, { file }));
+  const doc = normalize(resolved.doc);
 
   const ir = parsed.doc;
   if (errors.length) return { html: null, errors, doc, ir };
@@ -92,42 +96,81 @@ const SRC_FENCES = new Set(["chart", "stats", "hero", "flow", "sequence", "timel
  * its title and format, the file brings the data); a JSON array becomes the
  * fence body itself, or its `values` when the fence carries other keys.
  *
- * `video` and `slides` are excluded: their `src` is the media URL a reader
- * fetches, not a data file the renderer reads.
+ * `src` is resolved inside `baseDir` and never outside it: a document can only
+ * read its own directory, so rendering one never turns into a file-read
+ * primitive. A fence whose file could not be read is marked `broken`, which is
+ * how the parser marks unparseable JSON, so validation does not pile a shape
+ * complaint on top of the error already reported.
  *
- * @returns {RenderError[]}
+ * The document is not mutated: blocks that gained data come back as copies.
+ *
+ * @param {Doc} doc
+ * @param {{ file: string, baseDir: string }} opts
+ * @returns {{ doc: Doc, errors: RenderError[] }}
  */
 function resolveSources(doc, { file, baseDir }) {
   /** @type {RenderError[]} */
   const errors = [];
-  for (const block of doc.blocks ?? []) {
-    if (!SRC_FENCES.has(block.type)) continue;
+  if (!Array.isArray(doc.blocks)) return { doc, errors };
+  const root = resolve(baseDir) + sep;
+
+  const blocks = doc.blocks.map((block) => {
+    if (!block || !SRC_FENCES.has(block.type)) return block;
     const data = /** @type {Record<string, unknown> | undefined} */ (
       /** @type {{ data?: unknown }} */ (block).data
     );
-    if (!data || typeof data !== "object" || Array.isArray(data)) continue;
-    if (typeof data.src !== "string") continue;
+    if (!data || typeof data !== "object" || Array.isArray(data)) return block;
+    if (typeof data.src !== "string") return block;
 
     const label = block.type === "chart" ? `chart ${block.kind}`.trim() : block.type;
-    const path = isAbsolute(data.src) ? data.src : resolve(baseDir, data.src);
+    /** @param {string} message */
+    const fail = (message) => {
+      errors.push({ file, line: block.line, block: label, message });
+      return { ...block, broken: /** @type {true} */ (true) };
+    };
+
+    const src = data.src;
+    const path = resolve(baseDir, src);
+    if (isAbsolute(src) || !path.startsWith(root)) {
+      return fail(`src ${JSON.stringify(src)} escapes the document directory`);
+    }
+
+    let text;
+    try {
+      text = readFileSync(path, "utf8");
+    } catch (err) {
+      return fail(`src ${JSON.stringify(src)}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
     let loaded;
     try {
-      loaded = JSON.parse(readFileSync(path, "utf8"));
+      loaded = JSON.parse(text);
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      errors.push({ file, line: block.line, block: label, message: `data src "${data.src}": ${reason}` });
-      continue;
+      return fail(`src ${JSON.stringify(src)}: invalid JSON: ${jsonReason(err)}`);
     }
 
     const { src: _src, ...rest } = data;
     if (Array.isArray(loaded)) {
-      /** @type {{ data: unknown }} */ (block).data =
-        Object.keys(rest).length ? { ...rest, values: loaded } : loaded;
-    } else if (loaded && typeof loaded === "object") {
-      /** @type {{ data: unknown }} */ (block).data = { ...rest, ...loaded };
-    } else {
-      errors.push({ file, line: block.line, block: label, message: `data src "${data.src}": expected a JSON object or array` });
+      return { ...block, data: Object.keys(rest).length ? { ...rest, values: loaded } : loaded };
     }
-  }
-  return errors;
+    if (loaded && typeof loaded === "object") return { ...block, data: { ...rest, ...loaded } };
+    return fail(`src ${JSON.stringify(src)}: expected a JSON object or array`);
+  });
+
+  return { doc: { ...doc, blocks }, errors };
+}
+
+/**
+ * The reason from a `JSON.parse` failure, with the window of source text the
+ * message quotes cut out: a diagnostic names the file, never its contents.
+ *
+ *     Unexpected token 'a', "{"values": nan}" is not valid JSON  ->  Unexpected token 'a'
+ *
+ * @param {unknown} err
+ * @returns {string}
+ */
+function jsonReason(err) {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.replace(/,?\s*(?:\.\.\.)?"[\s\S]*"(?:\.\.\.)?\s*is not valid JSON/, "").trim() ||
+    "not valid JSON";
 }

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -173,7 +173,62 @@ test("a data fence can load its rows from a file beside the document", () => {
   assert.equal(missing.errors.length, 1);
   assert.equal(missing.errors[0].block, "chart columns");
   assert.equal(missing.errors[0].line, 7); // the line of the opening fence
-  assert.match(missing.errors[0].message, /data src "nope\.json": ENOENT/);
+  assert.match(missing.errors[0].message, /^src "nope\.json": ENOENT/);
+});
+
+test("a src is scoped to the document directory", () => {
+  const dir = mkdtempSync(join(tmpdir(), "postplan-src-"));
+  mkdirSync(join(dir, "doc"));
+  writeFileSync(join(dir, "secret.json"), JSON.stringify({ labels: ["Apr"], values: [61] }));
+  const md = (src) =>
+    `---\ntitle: T\n---\n\nLead.\n\n\`\`\`chart columns\n${JSON.stringify({ src })}\n\`\`\`\n`;
+  const at = (src) => render(md(src), { file: join(dir, "doc", "plan.md") });
+
+  for (const src of ["../secret.json", "sub/../../secret.json", join(dir, "secret.json")]) {
+    const { html, errors } = at(src);
+    assert.equal(html, null);
+    assert.deepEqual(
+      errors.map((e) => `${e.line} ${e.block}: ${e.message}`),
+      [`7 chart columns: src ${JSON.stringify(src)} escapes the document directory`],
+      src,
+    );
+  }
+
+  // `doc-notes` is a sibling that merely shares the prefix of `doc`, so the
+  // check has to compare against `doc/` and not `doc`.
+  mkdirSync(join(dir, "doc-notes"));
+  writeFileSync(join(dir, "doc-notes", "rows.json"), JSON.stringify([1, 2]));
+  assert.match(
+    at("../doc-notes/rows.json").errors[0].message,
+    /^src "\.\.\/doc-notes\/rows\.json" escapes the document directory$/,
+  );
+});
+
+test("rows from a side file are validated like rows written inline", () => {
+  const dir = mkdtempSync(join(tmpdir(), "postplan-src-"));
+  writeFileSync(join(dir, "rows.json"), JSON.stringify({ labels: ["Apr", "May"], values: [61, "n/a"] }));
+  const md = '---\ntitle: T\n---\n\nLead.\n\n```chart columns\n{"title":"T","src":"rows.json"}\n```\n';
+
+  const { html, errors } = render(md, { file: join(dir, "plan.md") });
+  assert.equal(html, null);
+  assert.equal(errors.length, 1, JSON.stringify(errors));
+  assert.equal(errors[0].line, 7);
+  assert.equal(errors[0].block, "chart columns");
+  assert.match(errors[0].message, /^\/values\/1 /);
+  assert.match(errors[0].message, /"n\/a"/);
+});
+
+test("a side file that is not JSON is named but never quoted", () => {
+  const dir = mkdtempSync(join(tmpdir(), "postplan-src-"));
+  writeFileSync(join(dir, "rows.json"), '{"labels":["Apr"],"values":[nan],"secret":"hunter2"}');
+  const md = '---\ntitle: T\n---\n\nLead.\n\n```chart columns\n{"src":"rows.json"}\n```\n';
+
+  const { html, errors } = render(md, { file: join(dir, "plan.md") });
+  assert.equal(html, null);
+  // The shape complaint is suppressed: the read already failed, once.
+  assert.equal(errors.length, 1, JSON.stringify(errors));
+  assert.match(errors[0].message, /^src "rows\.json": invalid JSON: /);
+  assert.equal(/hunter2|labels/.test(errors[0].message), false, errors[0].message);
 });
 
 test("html a document could not upload is rejected, at the fence that wrote it", () => {
