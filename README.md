@@ -78,6 +78,31 @@ latest. `--new` starts a separate draft instead.
 Draft ids are random and unguessable, and there is no listing URL: a link leads to
 one document and nothing else. `/d/<id>/raw` returns the source.
 
+## Versions
+
+Every upload keeps the versions before it. Nothing is overwritten or deleted.
+
+- `/d/<id>` is always the latest version.
+- `/d/<id>/v/<n>` is version `n`, exactly as it was uploaded, and `/d/<id>/v/<n>/raw`
+  is its source. These URLs never change, so they are served with
+  `Cache-Control: private, max-age=31536000, immutable`. A missing version is a 404.
+- Every response carries `X-Postplan-Version: <n>`.
+
+Published HTML is stored and served as uploaded; the server never re-renders it.
+A renderer change only affects what you upload next, so an old version keeps
+looking the way it did.
+
+`upload` prints a `History:` line with the URL of the version it just made.
+`versions` lists them all, and takes a draft id or any of its URLs:
+
+```bash
+npx postplan-aryan versions https://<deployment>.convex.site/d/<id>
+```
+
+It prints the version, date, bytes, uploader, git commit (when uploaded from a
+repo) and URL of each, newest first. `--json` prints the raw response from
+`GET /api/drafts/<id>/versions`.
+
 ## Self-hosting
 
 You need a Convex project and an S3 bucket. No Postgres, no Railway.

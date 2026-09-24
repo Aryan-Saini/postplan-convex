@@ -1,5 +1,5 @@
 import { httpRouter } from "convex/server";
-import { httpAction } from "./_generated/server";
+import { httpAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { validateHtml } from "../src/html-policy.js";
 import { draftKey, presign, s3Config, s3Host } from "./lib/s3";
@@ -164,6 +164,30 @@ http.route({
     const auth = authorize(request);
     if (!auth.ok) return json({ error: "Unauthorized." }, 401);
     return json({ drafts: await ctx.runQuery(internal.drafts.list, {}) });
+  }),
+});
+
+/** Every version of one draft, newest first, each with its own URL. */
+http.route({
+  pathPrefix: "/api/drafts/",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const auth = authorize(request);
+    if (!auth.ok) return json({ error: "Unauthorized." }, 401);
+    const match = new URL(request.url).pathname.match(/^\/api\/drafts\/([^/]+)\/versions\/?$/);
+    if (!match) return json({ error: "Not found." }, 404);
+    const found = await ctx.runQuery(internal.drafts.versions, { draftId: decodeURIComponent(match[1]) });
+    if (!found) return json({ error: "No such draft." }, 404);
+    const publicUrl = `${baseUrl(request)}/d/${found.draftId}`;
+    return json({
+      ...found,
+      publicUrl,
+      versions: found.versions.map((row) => ({
+        ...row,
+        url: `${publicUrl}/v/${row.versionNumber}`,
+        rawUrl: `${publicUrl}/v/${row.versionNumber}/raw`,
+      })),
+    });
   }),
 });
 
@@ -397,30 +421,50 @@ const htmlSecurityHeaders = {
   "Referrer-Policy": "no-referrer",
 } as const;
 
-/** The published document. Serving it here keeps the URL stable across versions. */
-async function serveDraft(ctx: any, request: Request, raw: boolean): Promise<Response> {
+const notFound = (text: string) =>
+  new Response("<!doctype html><meta charset=utf-8><title>Not found</title>"
+    + `<body style='background:#000;color:#888;font:16px system-ui;padding:48px'>${text}`,
+    {
+      status: 404,
+      headers: { "Content-Type": "text/html; charset=utf-8", ...htmlSecurityHeaders },
+    });
+
+/**
+ * The published document. `/d/<id>` serves the latest version, which is what keeps
+ * one URL stable across uploads; `/d/<id>/v/<n>` serves version n exactly. Both
+ * take a `/raw` suffix. Convex has no route params, so this one prefix route parses
+ * the version itself. A version's bytes never change, so its URL caches forever.
+ */
+async function serveDraft(ctx: ActionCtx, request: Request): Promise<Response> {
   const path = new URL(request.url).pathname;
-  const id = decodeURIComponent(
+  const raw = path.endsWith("/raw");
+  const rest = decodeURIComponent(
     path.slice("/d/".length).replace(/\/raw$/, "").replace(/\/+$/, ""),
   );
-  const found = await ctx.runQuery(internal.drafts.latest, { draftId: id });
-  if (!found) {
-    return new Response("<!doctype html><meta charset=utf-8><title>Not found</title>"
-      + "<body style='background:#000;color:#888;font:16px system-ui;padding:48px'>No such draft.",
-      {
-        status: 404,
-        headers: { "Content-Type": "text/html; charset=utf-8", ...htmlSecurityHeaders },
-      });
+  const pinned = rest.match(/^(.+)\/v\/(\d+)$/);
+
+  let version;
+  if (pinned) {
+    version = await ctx.runQuery(internal.drafts.version, {
+      draftId: pinned[1],
+      versionNumber: Number(pinned[2]),
+    });
+    if (!version) return notFound("No such version.");
+  } else {
+    const found = await ctx.runQuery(internal.drafts.latest, { draftId: rest });
+    if (!found) return notFound("No such draft.");
+    version = found.version;
   }
+
   const config = s3Config();
-  const upstream = await fetch(await presign(config, "GET", found.version.key, 120));
+  const upstream = await fetch(await presign(config, "GET", version.key, 120));
   if (!upstream.ok) return new Response("Draft content missing", { status: 502 });
   return new Response(await upstream.text(), {
     status: 200,
     headers: {
       "Content-Type": raw ? "text/plain; charset=utf-8" : "text/html; charset=utf-8",
-      "Cache-Control": "private, max-age=30",
-      "X-Postplan-Version": String(found.version.versionNumber),
+      "Cache-Control": pinned ? "private, max-age=31536000, immutable" : "private, max-age=30",
+      "X-Postplan-Version": String(version.versionNumber),
       // /raw is plain text and is never rendered, so it needs nosniff but no CSP.
       ...(raw ? { "X-Content-Type-Options": "nosniff" } : htmlSecurityHeaders),
     },
@@ -430,10 +474,7 @@ async function serveDraft(ctx: any, request: Request, raw: boolean): Promise<Res
 http.route({
   pathPrefix: "/d/",
   method: "GET",
-  handler: httpAction(async (ctx, request) => {
-    const raw = new URL(request.url).pathname.endsWith("/raw");
-    return await serveDraft(ctx, request, raw);
-  }),
+  handler: httpAction(serveDraft),
 });
 
 export default http;

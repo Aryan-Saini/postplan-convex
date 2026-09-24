@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
+import { parseDraftRef } from "../src/draft-ref.js";
 import { validateHtml } from "../src/html-policy.js";
 import { render } from "../src/render/index.js";
 import { formatError } from "../src/render/schema/index.js";
@@ -283,6 +284,7 @@ async function publish(htmlPath, key, options) {
     console.log(`Raw HTML: ${body.rawUrl || `${body.publicUrl.replace(/\/+$/, "")}/raw`}`);
     console.log(`Draft ID: ${body.draftId}`);
     console.log(`Version: ${body.versionNumber}`);
+    console.log(`History: ${body.publicUrl.replace(/\/+$/, "")}/v/${body.versionNumber}`);
     for (const warning of body.warnings || []) {
       console.warn(`Warning: ${warning}`);
     }
@@ -435,6 +437,49 @@ program
         console.log(`  ${draft.description}`);
       }
       console.log("");
+    }
+  });
+
+program
+  .command("versions")
+  .argument("<draft>", "Draft id, or any of its URLs")
+  .description("List every published version of a draft, newest first.")
+  .option("--api-url <url>", "Override the default Postplan API base URL")
+  .option("--json", "Print the raw JSON response")
+  .action(async (draft, options) => {
+    const ref = parseDraftRef(draft);
+    if (!ref) throw new CliError(`Not a draft id or draft URL: ${draft}`);
+    const { apiUrl, apiKey } = readAuth(options.apiUrl);
+    const response = await fetch(`${apiUrl}/api/drafts/${encodeURIComponent(ref.draftId)}/versions`, {
+      headers: { Authorization: `Bearer ${apiKey}` }
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new CliError(body.error || `Failed to list versions (${response.status}).`);
+    }
+
+    if (options.json) {
+      console.log(JSON.stringify(body, null, 2));
+      return;
+    }
+
+    const versions = body.versions || [];
+    console.log(`${body.filename || body.draftId} (${versions.length} version${versions.length === 1 ? "" : "s"})`);
+    console.log(`${body.publicUrl}\n`);
+    const rows = [
+      ["VERSION", "DATE", "BYTES", "UPLOADER", "COMMIT", "URL"],
+      ...versions.map((v) => [
+        `v${v.versionNumber}`,
+        formatDate(v.createdAt),
+        String(v.bytes),
+        v.createdBy || "",
+        v.gitCommitSha ? v.gitCommitSha.slice(0, 7) : "",
+        v.url
+      ])
+    ];
+    const widths = rows[0].map((_, i) => Math.max(...rows.map((row) => row[i].length)));
+    for (const row of rows) {
+      console.log(row.map((cell, i) => (i === row.length - 1 ? cell : cell.padEnd(widths[i]))).join("  "));
     }
   });
 
@@ -599,6 +644,14 @@ function inferOrgFromRoot(repoRoot) {
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+/** `2026-09-24 14:03` in local time, or `unknown`. */
+function formatDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function timeAgo(value) {

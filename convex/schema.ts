@@ -41,6 +41,10 @@ export default defineSchema({
     sha256: v.optional(v.string()),
     bytes: v.number(),
     metadata: v.optional(v.any()),
+    // Who uploaded this version and the description it was uploaded with.
+    // Optional: versions written before 0.7.0 have neither.
+    createdBy: v.optional(v.string()),
+    description: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_draft", ["draftId"])

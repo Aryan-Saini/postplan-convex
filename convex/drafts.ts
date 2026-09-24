@@ -1,5 +1,16 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery, type QueryCtx } from "./_generated/server";
+
+/** A draft by slug, falling back to its Convex document id (same as uploads). */
+async function findDraft(ctx: QueryCtx, draftId: string) {
+  const draft = await ctx.db
+    .query("drafts")
+    .withIndex("by_draftId", (q) => q.eq("draftId", draftId))
+    .unique();
+  if (draft) return draft;
+  const id = ctx.db.normalizeId("drafts", draftId);
+  return id ? await ctx.db.get(id) : null;
+}
 
 export const upsert = internalMutation({
   args: {
@@ -44,6 +55,8 @@ export const upsert = internalMutation({
       sha256: args.sha256,
       bytes: args.bytes,
       metadata: args.metadata,
+      createdBy: args.createdBy,
+      description: args.description,
       createdAt: Date.now(),
     });
     return { versionNumber };
@@ -54,15 +67,7 @@ export const upsert = internalMutation({
 export const latest = internalQuery({
   args: { draftId: v.string() },
   handler: async (ctx, args) => {
-    // Same fallback as uploads: slug first, then the Convex document id.
-    let draft = await ctx.db
-      .query("drafts")
-      .withIndex("by_draftId", (q) => q.eq("draftId", args.draftId))
-      .unique();
-    if (!draft) {
-      const id = ctx.db.normalizeId("drafts", args.draftId);
-      draft = id ? await ctx.db.get(id) : null;
-    }
+    const draft = await findDraft(ctx, args.draftId);
     if (!draft) return null;
     const version = await ctx.db
       .query("versions")
@@ -71,6 +76,56 @@ export const latest = internalQuery({
       )
       .unique();
     return version ? { draft, version } : null;
+  },
+});
+
+/** One exact version of a draft, or null. Versions never change once written. */
+export const version = internalQuery({
+  args: { draftId: v.string(), versionNumber: v.number() },
+  handler: async (ctx, args) => {
+    const draft = await findDraft(ctx, args.draftId);
+    if (!draft) return null;
+    return await ctx.db
+      .query("versions")
+      .withIndex("by_draft_version", (q) =>
+        q.eq("draftId", draft.draftId).eq("versionNumber", args.versionNumber),
+      )
+      .unique();
+  },
+});
+
+/** Every version of a draft, newest first, or null when the draft does not exist. */
+export const versions = internalQuery({
+  args: { draftId: v.string() },
+  handler: async (ctx, args) => {
+    const draft = await findDraft(ctx, args.draftId);
+    if (!draft) return null;
+    const rows = await ctx.db
+      .query("versions")
+      .withIndex("by_draft_version", (q) => q.eq("draftId", draft.draftId))
+      .order("desc")
+      .collect();
+    return {
+      draftId: draft.draftId,
+      filename: draft.filename,
+      latestVersionNumber: draft.latestVersion,
+      versions: rows.map((row) => {
+        const meta = (row.metadata ?? {}) as Record<string, unknown>;
+        const text = (key: string) => (typeof meta[key] === "string" ? (meta[key] as string) : null);
+        return {
+          versionNumber: row.versionNumber,
+          bytes: row.bytes,
+          createdAt: new Date(row.createdAt).toISOString(),
+          // Pre-0.7.0 versions did not record an uploader; the draft's creator did them all.
+          createdBy: row.createdBy ?? draft.createdBy,
+          sha256: row.sha256 ?? null,
+          description: row.description ?? null,
+          gitBranch: text("gitBranch"),
+          gitCommitSha: text("gitCommitSha"),
+          gitCommitSubject: text("gitCommitSubject"),
+        };
+      }),
+    };
   },
 });
 
