@@ -357,9 +357,9 @@ test("examples/gallery.md renders with no errors", () => {
   assert.match(html, /<title>Postplan component gallery<\/title>/);
   assert.match(html, /<div class="contents">/);
   assert.match(html, /<ul class="sources">/);
-  // 132 KB: the media failure panels and their script added about 10 KB, toned
-  // chart labels about 0.5 KB.
-  assert.ok(Buffer.byteLength(html) < 132 * 1024, "the gallery stays under 132 KB");
+  // 140 KB: the media failure panels and their script added about 10 KB, toned
+  // chart labels about 0.5 KB, the "When media fails" examples about 6 KB.
+  assert.ok(Buffer.byteLength(html) < 140 * 1024, "the gallery stays under 140 KB");
 });
 
 test("an unknown block type renders nothing rather than half a block", () => {

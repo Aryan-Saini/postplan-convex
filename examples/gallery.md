@@ -373,6 +373,48 @@ playing, and never a bare link. The native player carries the controls.
  "caption":"Placeholder clip, 0:02"}
 ```
 
+## When media fails
+
+A link can 404, a signed S3 URL can expire, a video can be the wrong format. Each case renders as a labelled panel instead of a broken glyph.
+
+### Missing file
+
+![A screenshot that was never uploaded](https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-fail-missing.png "zoom")
+
+### Expired signed link
+
+![A presigned screenshot, signed in January 2024 for five minutes](https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-fail-signed.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAEXAMPLE%2F20240101%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20240101T000000Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=0000000000000000000000000000000000000000000000000000000000000000)
+
+### Unsupported video
+
+```video
+{"src":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-fail-clip.mov",
+ "poster":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-poster-gd1v9qj3.png",
+ "caption":"A QuickTime recording, not an mp4"}
+```
+
+### One bad slide
+
+```slides
+[{"src":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-slide-1-7b7u24d4.png","caption":"Loads"},
+ {"src":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-fail-slide.png","caption":"This slide's file is missing"},
+ {"src":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-slide-3-p3tv75dp.png","caption":"Loads"}]
+```
+
+### Plain image, no zoom
+
+Without a `zoom` title there is no lightbox to disable; the panel takes the image's place in the paragraph.
+
+![A plain image whose file is missing](https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-fail-plain.png)
+
+| State | What the reader sees | What an agent should do |
+|:---|:---|:---|
+| Missing file | Couldn't load this image. | Re-upload with file-upload |
+| Expired signed link | This link has expired. | Republish the document |
+| Unsupported video | This video format isn't supported here. | Use mp4 with H.264 video |
+| One bad slide | Couldn't load this image. | Re-upload that slide with file-upload |
+| Plain image, no zoom | Couldn't load this image. | Re-upload with file-upload |
+
 ## Diagrams
 
 The flow and sequence shapes mermaid is normally used for, drawn as SVG with computed geometry.

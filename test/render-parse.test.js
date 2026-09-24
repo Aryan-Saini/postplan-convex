@@ -307,6 +307,8 @@ test("examples/gallery.md block sequence is stable", () => {
     "chart:small-multiples", "chart:share",
     "heading", "markdown", "code", "code", "code", "code", "code", "code", "diff",
     "heading", "markdown", "html", "heading", "markdown", "slides", "heading", "markdown", "video",
+    "heading", "markdown", "heading", "markdown", "heading", "markdown", "heading", "video",
+    "heading", "slides", "heading", "markdown",
     "heading", "markdown", "flow", "sequence",
     "heading", "markdown", "math", "math",
     "heading", "timeline",
