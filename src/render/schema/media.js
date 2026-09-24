@@ -59,9 +59,14 @@ export function validateVideo(errors, block, file) {
   unknownKeys(ctx, body, "", ["src", "poster", "caption"]);
 }
 
-/** An `<img>`, `<video>` or `<source>` tag, and the src-like attributes on one. */
-const MEDIA_TAG = /<(img|video|source)\b[^>]*>/gi;
-const SRC_ATTR = /\s(src|poster)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+/**
+ * An `<img>`, `<video>` or `<source>` tag, and one attribute within it. The
+ * attribute pattern is walked from just past the tag name, so each match
+ * consumes a whole `name=value` pair, quotes and all, and a ` src=` inside an
+ * alt or title value is never read as an attribute.
+ */
+const MEDIA_TAG = /<(img|video|source)\b([^>]*)>/gi;
+const ATTR = /([^\s"'<>\/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g;
 
 /**
  * Every media src in a block's HTML: a markdown `![…](…)`, a callout or
@@ -73,10 +78,14 @@ const SRC_ATTR = /\s(src|poster)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
  * @param {string} file
  */
 export function validateInlineMedia(errors, block, file) {
-  for (const [tag, name] of block.html.matchAll(MEDIA_TAG)) {
-    for (const m of tag.matchAll(SRC_ATTR)) {
-      const kind = name.toLowerCase() === "img" || m[1].toLowerCase() === "poster" ? "image" : "video";
-      const message = srcError(kind, unescapeHtml(m[2] ?? m[3] ?? m[4]));
+  for (const [, name, attrs] of block.html.matchAll(MEDIA_TAG)) {
+    for (const m of attrs.matchAll(ATTR)) {
+      const attr = m[1].toLowerCase();
+      if (attr !== "src" && attr !== "poster") continue;
+      const value = m[2] ?? m[3] ?? m[4];
+      if (value === undefined) continue;
+      const kind = name.toLowerCase() === "img" || attr === "poster" ? "image" : "video";
+      const message = srcError(kind, unescapeHtml(value));
       if (message) errors.push({ file, line: block.line, block: "", message });
     }
   }

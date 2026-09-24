@@ -133,6 +133,15 @@ The upload and download pages (`/u/<slug>`, `/s/<slug>`) are the server's own
 HTML rather than uploaded HTML, and they need cross-origin fetch, PUT and framing
 against S3, so they are not covered by this policy.
 
+## 0.6.0
+
+Two changes can alter what an existing document renders:
+
+- An image, video or poster src that is `http:` or relative is now a render
+  error. Publish the file with file-upload first and use its `https:` URL (or a
+  `data:` URI).
+- A prose line directly under a `"zoom"` image becomes that image's caption.
+
 ## What changed from upstream
 
 - `express` + `pg` + `@aws-sdk/client-s3` + `jose` are gone; Convex serves the API

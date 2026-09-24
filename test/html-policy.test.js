@@ -24,3 +24,10 @@ test("every other link stays blocked", () => {
   ];
   for (const link of blocked) assert.ok(validateHtml(doc(link)).errors.includes(LINK_BLOCKED), link);
 });
+
+test("an icon href must name exactly svg+xml or png", () => {
+  for (const href of ["data:image/svg+xmlfoo,x", "data:image/pngx;base64,AAAA", "data:image/png"]) {
+    assert.ok(validateHtml(doc(`<link rel="icon" href="${href}">`)).errors.includes(LINK_BLOCKED), href);
+  }
+  assert.deepEqual(validateHtml(doc(`<link rel="icon" href="DATA:IMAGE/SVG+XML,x">`)).errors, []);
+});

@@ -53,3 +53,9 @@ test("linkState reads an S3 presign's expiry", () => {
   assert.equal(linkState("https://e.test/a.png"), "plain");
   assert.equal(linkState("data:image/png;base64,AAAA"), "data");
 });
+
+test("an empty or non-numeric X-Amz-Expires reads as signed, not expired", () => {
+  const signedAt = "https://e.test/a.png?X-Amz-Date=20260923T120000Z&X-Amz-Expires=";
+  assert.equal(linkState(signedAt, Date.UTC(2026, 8, 24)), "signed");
+  assert.equal(linkState(`${signedAt}soon`, Date.UTC(2026, 8, 24)), "signed");
+});

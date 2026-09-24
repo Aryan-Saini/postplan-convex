@@ -26,8 +26,8 @@ import { unescapeHtml } from "./math.js";
 /**
  * What kind of link a media src is. A URL carrying `X-Amz-Date` and
  * `X-Amz-Expires` is an S3 presign, and it is `expired` once `now` is past the
- * signing time plus the lifetime. Signed params that do not parse still count
- * as `signed`.
+ * signing time plus the lifetime. Signed params that do not parse (an empty
+ * or non-numeric lifetime, a malformed date) still count as `signed`.
  *
  * @param {string} src
  * @param {number} [now] epoch milliseconds
@@ -45,8 +45,8 @@ export function linkState(src, now = Date.now()) {
   const expires = params.get("X-Amz-Expires");
   if (date === null && expires === null) return "plain";
   const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(date || "");
+  if (!m || !/^\d+$/.test(expires || "")) return "signed";
   const seconds = Number(expires);
-  if (!m || expires === null || !Number.isFinite(seconds)) return "signed";
   const signedAt = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
   return now > signedAt + seconds * 1000 ? "expired" : "signed";
 }

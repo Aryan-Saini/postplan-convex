@@ -190,6 +190,12 @@ test("a markdown image or an html fence img must be https: or data:", () => {
   clean(doc('![Dash](https://e.example/d.png "zoom")\n\n![Dot](data:image/png;base64,iVBORw0KGgo=)'));
 });
 
+test("a src= inside an alt or title is not read as the src", () => {
+  clean(doc('![A](https://x.example/a.png "alt with src=foo")'));
+  clean(doc('```html\n<img alt=" src=bad.png" title=\'poster=x\' src="https://x.example/a.png">\n```'));
+  one('```html\n<img alt="src=https://x.example/a.png" src="a.png">\n```', `plan.md:7 image src "a.png" ${FIX}`);
+});
+
 /* ============================================================ numbers */
 
 test("non-finite numbers are rejected, JSON literals and all", () => {
