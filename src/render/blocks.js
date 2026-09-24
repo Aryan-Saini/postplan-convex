@@ -28,11 +28,12 @@ import { MEDIA_SCRIPT, withFailPanels } from "./media.js";
 /** Per-document render state: lightbox ids are document-wide, a `sources`
  * heading changes how the list under it is styled, `chips` records that a
  * file chip needs the copy script and the file glyph, and `media` that a
- * failure panel needs the media script and its icons.
- * @typedef {{ lightboxes: string[], zoomCount: number, heading: string, chips: boolean, media: boolean }} Ctx */
+ * failure panel needs the media script and its icons, and `slides` that a
+ * slideshow needs the slides script and the chevrons.
+ * @typedef {{ lightboxes: string[], zoomCount: number, heading: string, chips: boolean, media: boolean, slides: boolean }} Ctx */
 
 /** @returns {Ctx} */
-const newCtx = () => ({ lightboxes: [], zoomCount: 0, heading: "", chips: false, media: false });
+const newCtx = () => ({ lightboxes: [], zoomCount: 0, heading: "", chips: false, media: false, slides: false });
 
 /* ------------------------------------------------------------------ document */
 
@@ -43,7 +44,8 @@ const newCtx = () => ({ lightboxes: [], zoomCount: 0, heading: "", chips: false,
  * A document with code blocks, file chips or media also gets, once each, the
  * icon sprite they reference (top of the body) and the document script (end
  * of the body): the copy script, plus the media script when there are failure
- * panels. A document with none of them stays script-free.
+ * panels and the slides script when there is a slideshow. A document with none
+ * of them stays script-free.
  *
  * @param {Doc} doc
  * @returns {string}
@@ -69,12 +71,13 @@ export function renderBody(doc) {
 
   const wrap = `<div class="wrap"><main>\n${parts.filter(Boolean).join("\n")}\n</main></div>`;
   const code = blocks.filter((b) => b.type === "code" || b.type === "diff");
-  if (!code.length && !ctx.chips && !ctx.media) return wrap;
+  if (!code.length && !ctx.chips && !ctx.media && !ctx.slides) return wrap;
   const icons = code.map((b) => (b.type === "diff" ? "diff" : iconKey(b.lang)));
   if (code.length || ctx.media) icons.push("copy");
   if (ctx.chips || code.some((b) => b.file)) icons.push("file");
   if (ctx.media) icons.push("image-off", "video-off", "open");
-  const script = ctx.media ? `${COPY_SCRIPT}\n${MEDIA_SCRIPT}` : COPY_SCRIPT;
+  if (ctx.slides) icons.push("chevron-left", "chevron-right");
+  const script = [COPY_SCRIPT, ctx.media && MEDIA_SCRIPT, ctx.slides && SLIDES_SCRIPT].filter(Boolean).join("\n");
   return `${codeSprite(icons)}\n${wrap}\n<script>${script}</script>`;
 }
 
@@ -153,7 +156,7 @@ export function renderBlock(block, ctx = newCtx()) {
     case "stats": return stats(block);
     case "hero": return hero(block);
     case "timeline": return timeline(block);
-    case "slides": return withFailPanels(slides(block), ctx);
+    case "slides": return withFailPanels(slides(block, ctx), ctx);
     case "video": return withFailPanels(video(block), ctx);
     case "code": return renderCode(block);
     case "diff": return renderDiff(block);
@@ -390,10 +393,15 @@ function timeline(block) {
   return `<ul class="timeline">${rows.join("")}</ul>`;
 }
 
-/** Scroll-snap slideshow. The dots are anchors, so it needs no script. */
-function slides(block) {
+/**
+ * Scroll-snap slideshow. The dots are anchors, so paging needs no script; the
+ * arrows ship `hidden` and `SLIDES_SCRIPT` reveals them, so a reader with
+ * scripts blocked gets the plain snap strip.
+ */
+function slides(block, ctx) {
   const items = asArray(block.data);
   if (!items.length) return "";
+  ctx.slides = true;
   const figures = items.map((it, i) => {
     const id = `${block.id}-${i + 1}`;
     const cap = it.caption ? `<figcaption>${i + 1} · ${escapeHtml(it.caption)}</figcaption>` : "";
@@ -402,9 +410,51 @@ function slides(block) {
   });
   const dots = items.map((_, i) =>
     `<a href="#${escapeHtml(`${block.id}-${i + 1}`)}" aria-label="Slide ${i + 1}"></a>`).join("");
-  return `<div class="slides"><div class="track">${figures.join("")}</div>` +
+  const arrow = (dir, label) =>
+    `<button type="button" class="arrow ${dir}" aria-label="${label}" hidden>` +
+    `<svg viewBox="0 0 16 16" aria-hidden="true"><use href="#icon-chevron-${dir === "prev" ? "left" : "right"}"/></svg></button>`;
+  return `<div class="slides"><div class="stage">` +
+    `<div class="track" tabindex="0" role="region" aria-label="Slideshow, ${items.length} slides">${figures.join("")}</div>` +
+    `${arrow("prev", "Previous slide")}${arrow("next", "Next slide")}</div>` +
     `<div class="dots">${dots}</div><div class="count">${items.length} slides</div></div>`;
 }
+
+/**
+ * Slideshow behaviour: one delegated click and keydown listener, no inline
+ * handlers. An arrow (or Left/Right on the focused track) scrolls the track by
+ * one slide and scroll-snap settles it. On each `scroll` the arrow at an end
+ * hides and the dot for the slide in view gets `aria-current`.
+ */
+export const SLIDES_SCRIPT = `(() => {
+  const sync = (track) => {
+    const box = track.closest(".slides");
+    const max = track.scrollWidth - track.clientWidth;
+    const prev = box.querySelector(".arrow.prev");
+    const next = box.querySelector(".arrow.next");
+    prev.hidden = track.scrollLeft <= 1;
+    next.hidden = track.scrollLeft >= max - 1;
+    for (const b of [prev, next]) if (b.hidden && document.activeElement === b) track.focus();
+    const dots = box.querySelectorAll(".dots a");
+    const i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+    dots.forEach((d, n) => { if (n === i) d.setAttribute("aria-current", "true"); else d.removeAttribute("aria-current"); });
+  };
+  const page = (track, dir) => track.scrollBy({ left: dir * track.clientWidth, behavior: "smooth" });
+  for (const track of document.querySelectorAll(".slides .track")) {
+    track.addEventListener("scroll", () => sync(track), { passive: true });
+    sync(track);
+  }
+  addEventListener("resize", () => { for (const t of document.querySelectorAll(".slides .track")) sync(t); });
+  document.addEventListener("click", (e) => {
+    const b = e.target instanceof Element ? e.target.closest(".slides .arrow") : null;
+    if (b) page(b.closest(".slides").querySelector(".track"), b.classList.contains("next") ? 1 : -1);
+  });
+  document.addEventListener("keydown", (e) => {
+    const t = e.target instanceof Element ? e.target.closest(".slides") : null;
+    if (!t || (e.key !== "ArrowLeft" && e.key !== "ArrowRight") || e.altKey || e.metaKey || e.ctrlKey) return;
+    e.preventDefault();
+    page(t.querySelector(".track"), e.key === "ArrowRight" ? 1 : -1);
+  });
+})();`;
 
 const VIDEO_TYPES = { mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime" };
 

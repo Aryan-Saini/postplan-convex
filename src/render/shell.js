@@ -210,8 +210,10 @@ img::before{content:"";position:absolute;inset:0;background:var(--surface);borde
 img::after{content:attr(alt);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   padding:12px 16px;font:14px/1.45 var(--sans);color:var(--ink);text-align:center}
 
-/* ---- slideshow: scroll-snap, dots are anchors ---- */
+/* ---- slideshow: scroll-snap, dots are anchors; the arrows exist only with script ---- */
 .slides{margin:0 0 8px}
+.slides .stage{position:relative}
+.slides .track:focus-visible{outline:2px solid #5c9cf0;outline-offset:2px;border-radius:8px}
 .slides .track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:12px;scroll-behavior:smooth;
   scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .slides .track::-webkit-scrollbar{display:none}
@@ -219,8 +221,20 @@ img::after{content:attr(alt);position:absolute;inset:0;display:flex;align-items:
 .slides .track img{display:block;width:100%;height:auto;border-radius:8px;border:1px solid var(--line)}
 .slides .track figcaption{font-size:14px;color:var(--ink);margin-top:8px}
 .slides .dots{display:flex;gap:8px;justify-content:center;margin:10px 0 0}
-.slides .dots a{width:8px;height:8px;border-radius:50%;background:#3a3a37;display:block}
+/* Centred on the image: the caption below it is 14px on a ~20px line plus an 8px gap. */
+.slides .arrow{position:absolute;top:calc(50% - 14px);transform:translateY(-50%);width:44px;height:44px;padding:0;
+  display:flex;align-items:center;justify-content:center;border-radius:50%;border:1px solid var(--line);
+  background:#1a1a19;color:#fff;cursor:pointer;opacity:0;transition:opacity .15s}
+.slides .arrow svg{width:20px;height:20px}
+.slides .arrow.prev{left:10px}
+.slides .arrow.next{right:10px}
+.slides .arrow[hidden]{display:none}
+.slides:hover .arrow,.slides:focus-within .arrow{opacity:1}
+.slides .arrow:focus-visible{outline:2px solid #5c9cf0;outline-offset:2px}
+@media (hover:none){.slides .arrow{opacity:1}}
+.slides .dots a{width:8px;height:8px;border-radius:50%;background:#383835;display:block}
 .slides .dots a:hover{background:var(--mark)}
+.slides .dots a[aria-current]{background:#fff}
 .slides .count{font-size:13px;color:var(--ink);text-align:center;margin-top:6px}
 
 /* ---- hero stat, the renderer's centred stat widget ---- */
@@ -400,8 +414,8 @@ export const FAVICONS = { black: FAVICON_BLACK, indigo: FAVICON_INDIGO };
 /**
  * Wrap body HTML in a complete, self-contained document: one <style>, no
  * external stylesheet, no webfont. The only script is the inline one a body
- * with code blocks, file chips or media brings for copying and for revealing
- * media failure panels.
+ * with code blocks, file chips, media or a slideshow brings for copying,
+ * revealing media failure panels and paging slideshows.
  *
  * @param {{ title: string, body: string, generator?: string, icon?: Icon }} opts
  *   `title` is the tab title as given, never suffixed. `icon` picks the

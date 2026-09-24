@@ -651,6 +651,9 @@ const ICONS = {
   "image-off": S("M13.5 10.5V3.5a1 1 0 0 0-1-1H5.5M2.5 4.5v8a1 1 0 0 0 1 1h8M2.5 10.5l3-3 3 3M9.5 8.5l1-1 3 3M1.5 1.5l13 13", "currentColor", 1.3),
   "video-off": S("M8 4.5h1.5a1 1 0 0 1 1 1V8M10.5 11v.5a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h1M10.5 7.5l4-2.5v6.5l-2.5-1.5M1.5 1.5l13 13", "currentColor", 1.3),
   open: S("M9.5 2.5h4v4M13.5 2.5 7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3", "currentColor", 1.3),
+  // Slideshow arrows: monoline chevrons.
+  "chevron-left": S("M10 3 5 8l5 5", "currentColor", 1.5),
+  "chevron-right": S("M6 3l5 5-5 5", "currentColor", 1.5),
 };
 
 /** The icon a language label carries: its own, or the generic `</>` glyph. */
@@ -661,7 +664,7 @@ export function iconKey(lang) {
 }
 
 /** Sprite entries that are interface glyphs, never a language's icon. */
-const UI_ICONS = words("copy file image-off video-off open");
+const UI_ICONS = words("copy file image-off video-off open chevron-left chevron-right");
 
 const useIcon = (key, cls) =>
   `<svg class="${cls}" viewBox="0 0 16 16" aria-hidden="true"><use href="#icon-${key}"/></svg>`;
@@ -671,8 +674,9 @@ const useIcon = (key, cls) =>
  * top of the body.
  *
  * @param {Iterable<string>} keys icon keys from `iconKey`, plus `copy` and
- *   `file` when a Copy button or a path is on the page, and `image-off`,
- *   `video-off` and `open` for media failure panels
+ *   `file` when a Copy button or a path is on the page, `image-off`,
+ *   `video-off` and `open` for media failure panels, and `chevron-left` and
+ *   `chevron-right` for slideshow arrows
  */
 export function codeSprite(keys) {
   const symbols = [...new Set(keys)].filter((k) => k in ICONS)

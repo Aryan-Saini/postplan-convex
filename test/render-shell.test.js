@@ -158,10 +158,28 @@ test('an image titled "zoom" becomes a figure linked to a lightbox overlay', () 
 
 test("a slideshow gets a snap track, anchored dots and a count", () => {
   const html = body('```slides\n[{"src":"https://e.test/1.png","caption":"List"},{"src":"https://e.test/2.png","caption":"Detail"}]\n```\n');
-  assert.match(html, /<div class="slides"><div class="track">/);
+  assert.match(html, /<div class="slides"><div class="stage"><div class="track" tabindex="0" role="region" aria-label="Slideshow, 2 slides">/);
   assert.match(html, /<figure id="slides-1-1"><img src="https:\/\/e\.test\/1\.png" alt="List" loading="lazy"><span class="media-fail"[^>]*>.*?<\/span><\/span><figcaption>1 · List<\/figcaption><\/figure>/);
   assert.match(html, /<div class="dots"><a href="#slides-1-1" aria-label="Slide 1"><\/a><a href="#slides-1-2" aria-label="Slide 2"><\/a><\/div>/);
   assert.match(html, /<div class="count">2 slides<\/div>/);
+});
+
+test("each slideshow gets prev and next arrows, hidden until the slides script runs", () => {
+  const two = '```slides\n[{"src":"https://e.test/1.png"},{"src":"https://e.test/2.png"},{"src":"https://e.test/3.png"}]\n```';
+  const html = body(`${two}\n\n${two}\n`);
+  const shows = html.match(/<div class="slides">.*?<div class="count">/gs) ?? [];
+  assert.equal(shows.length, 2);
+  for (const show of shows) {
+    assert.match(show, /<div class="track" tabindex="0"/);
+    assert.match(show, /<button type="button" class="arrow prev" aria-label="Previous slide" hidden><svg[^>]*><use href="#icon-chevron-left"\/><\/svg><\/button>/);
+    assert.match(show, /<button type="button" class="arrow next" aria-label="Next slide" hidden><svg[^>]*><use href="#icon-chevron-right"\/><\/svg><\/button>/);
+    assert.equal(show.match(/<figure /g)?.length, 3);
+    assert.equal(show.match(/<div class="dots">(.*?)<\/div>/)?.[1].match(/<a /g)?.length, 3);
+  }
+  assert.match(html, /<symbol id="icon-chevron-left"/);
+  assert.match(html, /<symbol id="icon-chevron-right"/);
+  assert.match(CSS, /\.slides \.arrow\{[^}]*opacity:0/);
+  assert.match(CSS, /@media \(hover:none\)\{\.slides \.arrow\{opacity:1\}\}/);
 });
 
 test("a video is a figure with a poster and a typed source", () => {

@@ -353,8 +353,8 @@ carries its own label.
 
 ### Slideshow
 
-Several screenshots of one flow go in a slideshow: swipe or scroll sideways, or use the dots. Scroll-snap
-does the paging, so it needs no script and degrades to a horizontal strip.
+Several screenshots of one flow go in a slideshow: swipe, scroll sideways, use the arrows or the arrow keys,
+or tap a dot. Scroll-snap does the paging, so with scripts blocked the arrows go and it stays a swipeable strip.
 
 ```slides
 [{"src":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-slide-1-7b7u24d4.png","caption":"The list view before the change"},
