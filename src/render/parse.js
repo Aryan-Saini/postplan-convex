@@ -113,7 +113,7 @@ function countLines(s) {
  * double-quoted), then bare flags.
  *
  *     chart columns id=throughput
- *     ts file=src/upload.ts lines title="The upload path"
+ *     ts file=src/upload.ts lines title="The upload path" range=12-40
  *
  * `words` holds the bare words after the kind: a chart's sub-kind, then flags.
  *
@@ -508,6 +508,8 @@ function fenceBlock(token, line, file, errors, nextId) {
   if (kind === "diff") {
     /** @type {import("./ir.js").DiffBlock} */
     const block = { id: nextId("diff", id), type: "diff", line, info: info.raw, source };
+    const path = info.attrs.file || info.attrs.path;
+    if (path) block.file = path;
     if (info.attrs.title) block.title = info.attrs.title;
     return [block];
   }
@@ -525,8 +527,11 @@ function fenceBlock(token, line, file, errors, nextId) {
 
   /** @type {import("./ir.js").CodeBlock} */
   const block = { id: nextId("code", id), type: "code", line, lang: kind, info: info.raw, source };
-  if (info.attrs.file) block.file = info.attrs.file;
+  // `path=` is an alias for `file=`; `range=12-40` numbers from 12 and labels the path.
+  const path = info.attrs.file || info.attrs.path;
+  if (path) block.file = path;
   if (info.attrs.title) block.title = info.attrs.title;
+  if (info.attrs.range) block.range = info.attrs.range;
   if (info.flags.includes("lines")) block.lines = true;
   return [block];
 }

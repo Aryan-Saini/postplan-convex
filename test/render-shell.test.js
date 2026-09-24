@@ -262,7 +262,7 @@ test("examples/gallery.md renders with no errors", () => {
   assert.match(html, /<title>Postplan component gallery<\/title>/);
   assert.match(html, /<div class="contents">/);
   assert.match(html, /<ul class="sources">/);
-  assert.ok(Buffer.byteLength(html) < 100 * 1024, "the gallery stays under 100 KB");
+  assert.ok(Buffer.byteLength(html) < 120 * 1024, "the gallery stays under 120 KB");
 });
 
 test("an unknown block type renders nothing rather than half a block", () => {

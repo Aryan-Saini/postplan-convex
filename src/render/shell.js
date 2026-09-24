@@ -216,9 +216,28 @@ svg.chart{display:block;overflow:visible;min-width:520px}
 /* ---- code: One Dark Pro on the surface, at the editor's 15/1.4 scaled to the page ---- */
 code,.code pre{font-feature-settings:"calt" 1,"ss01" 1;font-variant-ligatures:contextual;tab-size:2}
 .code{border-radius:8px;background:var(--surface);margin:0 0 20px;overflow:hidden;border:1px solid var(--line)}
-.code-head{display:flex;align-items:center;gap:12px;min-height:44px;padding:5px 8px 5px 14px;
+/* The head wraps rather than truncating a path on a desktop; a phone keeps one row (see the media query). */
+.code-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-height:44px;padding:5px 8px 5px 14px;
   border-bottom:1px solid var(--line);background:var(--surface-2)}
-.code-file{font:13px var(--mono);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.code-name{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-width:0}
+.code-sep{color:var(--ink)}
+.code-title{font:14px/1.4 var(--sans);color:var(--ink)}
+.code-range{font:12px var(--mono);color:var(--ink);white-space:nowrap}
+/* a path, in a file header or an inline chip: click copies it */
+.code-path,.file-chip{display:inline-flex;align-items:center;min-width:0;max-width:100%;margin:0;color:var(--ink);
+  font-family:var(--mono);cursor:pointer;text-align:left}
+.code-path{gap:7px;padding:2px 0;border:0;background:none;font-size:13px;line-height:1.4}
+.code-path:hover .p-name,.file-chip:hover .p-name{text-decoration:underline;text-underline-offset:3px}
+.code-path:focus-visible,.file-chip:focus-visible{outline:2px solid #5c9cf0;outline-offset:2px;border-radius:4px}
+.p-text{display:flex;min-width:0}
+.p-dir,.p-name{white-space:pre}
+.file-icon{width:14px;height:14px;flex:none}
+.file-chip{gap:5px;padding:0 8px;border:1px solid var(--line-strong);border-radius:999px;background:transparent;
+  font-size:.85em;line-height:1.55;vertical-align:baseline}
+.file-chip .file-icon{width:12px;height:12px}
+.code-path[data-state]::after,.file-chip[data-state]::after{font:12px var(--sans);margin-left:6px}
+.code-path[data-state=copied]::after,.file-chip[data-state=copied]::after{content:"Copied"}
+.code-path[data-state=selected]::after,.file-chip[data-state=selected]::after{content:"Selected"}
 .code-lang{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;letter-spacing:.07em;
   text-transform:uppercase;color:var(--ink);white-space:nowrap}
 .code-icon{width:16px;height:16px;flex:none}
@@ -231,6 +250,7 @@ code,.code pre{font-feature-settings:"calt" 1,"ss01" 1;font-variant-ligatures:co
 .copy-icon{width:14px;height:14px;flex:none}
 .sprite{position:absolute;width:0;height:0;overflow:hidden}
 .code pre{margin:0;padding:14px 0;overflow-x:auto;font:15px/1.4 var(--mono);color:#abb2bf}
+.code.plain pre{color:var(--ink)}
 .code pre > code{display:block;padding:0 18px;width:max-content;min-width:100%}
 .code code{background:0;border:0;padding:0;font-size:inherit;color:inherit;border-radius:0}
 /* numbered lines: a white 13px gutter, a hairline, and numbers that drag-copy skips */
@@ -309,6 +329,17 @@ ol.footnotes a.fn-back:hover{color:var(--ink)}
   body{font-size:16px}
   h1{font-size:34px} h2{font-size:22px}
   .wrap{padding:36px 18px 72px}
+  /* A path keeps one row: the directory ellipsizes so the file name stays whole.
+     A title after a path drops to its own line, and the language beside a path
+     shows as its icon alone (the label is still in the DOM). */
+  .code-head{flex-wrap:nowrap}
+  .code-name{flex:1 1 auto}
+  .code-path{flex:0 1 auto}
+  .p-dir{min-width:2ch;overflow:hidden;text-overflow:ellipsis}
+  .p-name{flex:none}
+  .code-title{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .code-range{flex:none}
+  .code-name + .code-tools .code-lang{font-size:0;gap:0}
 }
 @media print{
   body{background:#fff;color:#000}
@@ -322,7 +353,7 @@ const escText = (v) =>
 /**
  * Wrap body HTML in a complete, self-contained document: one <style>, no
  * external stylesheet, no webfont. The only script is the inline one a body
- * with code blocks brings for its Copy buttons.
+ * with code blocks or file chips brings for copying.
  *
  * @param {{ title: string, body: string, generator?: string }} opts
  *   `generator` is stamped as `<meta name="generator">` so a reader (and

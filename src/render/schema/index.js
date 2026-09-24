@@ -201,10 +201,10 @@ function normalizeBlock(block) {
     }
 
     case "code":
-      return { file: "", title: "", lines: false, ...block };
+      return { file: "", title: "", range: "", lines: false, ...block };
 
     case "diff":
-      return { title: "", ...block };
+      return { file: "", title: "", ...block };
 
     default:
       return block;

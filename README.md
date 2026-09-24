@@ -20,8 +20,10 @@ endpoint accepts: one file, no webfont, no network call. Charts, diagrams and
 formulas are generated as inline SVG and MathML at render time.
 
 Code blocks are highlighted at render time in One Dark Pro with a language icon,
-and each has a Copy button that puts the raw source on the clipboard; that button
-is the only script a document carries, and a document without code has none.
+and each has a Copy button that puts the raw source on the clipboard.
+`file=src/x.ts` puts a click-to-copy path in the header (`range=12-40` numbers an edit from line 12), and a
+backticked path in prose, like `convex/http.ts`, renders as a chip that copies it. That copy handler is the
+only script a document carries, and a document with neither code nor paths has none.
 
 ```bash
 npx postplan-aryan render plan.md              # writes plan.html

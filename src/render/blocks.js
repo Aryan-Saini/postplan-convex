@@ -5,17 +5,17 @@
  * `shell.js` defines. Charts, code, diagrams and math are drawn by `charts.js`,
  * `code.js`, `diagram.js` and `math.js`, which this module only dispatches to.
  *
- * The markdown blocks WP1 hands over are already HTML, so prose needs four
+ * The markdown blocks WP1 hands over are already HTML, so prose needs five
  * rewrites on the way out: inline math spans and display-math placeholders
- * become MathML, tables gain their scroll wrapper, and an image titled `zoom`
- * becomes a lightbox figure.
+ * become MathML, tables gain their scroll wrapper, an image titled `zoom`
+ * becomes a lightbox figure, and inline code that names a file becomes a chip.
  *
  * @module render/blocks
  */
 
 import { escapeHtml } from "./parse.js";
 import { meter, renderChart, sparkline } from "./charts.js";
-import { COPY_SCRIPT, codeSprite, iconKey, renderCode, renderDiff } from "./code.js";
+import { COPY_SCRIPT, codeSprite, iconKey, pathButton, renderCode, renderDiff } from "./code.js";
 import { renderFlow, renderSequence } from "./diagram.js";
 import { renderInlineMath, renderMathBlock, unescapeHtml } from "./math.js";
 
@@ -23,12 +23,13 @@ import { renderInlineMath, renderMathBlock, unescapeHtml } from "./math.js";
 /** @typedef {import("./ir.js").Doc} Doc */
 /** @typedef {import("./ir.js").Meta} Meta */
 
-/** Per-document render state: lightbox ids are document-wide, and a `sources`
- * heading changes how the list under it is styled.
- * @typedef {{ lightboxes: string[], zoomCount: number, heading: string }} Ctx */
+/** Per-document render state: lightbox ids are document-wide, a `sources`
+ * heading changes how the list under it is styled, and `chips` records that a
+ * file chip needs the copy script and the file glyph.
+ * @typedef {{ lightboxes: string[], zoomCount: number, heading: string, chips: boolean }} Ctx */
 
 /** @returns {Ctx} */
-const newCtx = () => ({ lightboxes: [], zoomCount: 0, heading: "" });
+const newCtx = () => ({ lightboxes: [], zoomCount: 0, heading: "", chips: false });
 
 /* ------------------------------------------------------------------ document */
 
@@ -36,9 +37,9 @@ const newCtx = () => ({ lightboxes: [], zoomCount: 0, heading: "" });
  * Render a whole document body: title, byline, contents strip, then every block
  * in order, with any lightbox overlays collected at the end.
  *
- * A document with code blocks also gets, once each, the icon sprite their
- * headers reference (top of the body) and the Copy button's script (end of the
- * body). A document without code carries neither, so it stays script-free.
+ * A document with code blocks or file chips also gets, once each, the icon
+ * sprite they reference (top of the body) and the copy script (end of the
+ * body). A document with neither carries neither, so it stays script-free.
  *
  * @param {Doc} doc
  * @returns {string}
@@ -64,8 +65,10 @@ export function renderBody(doc) {
 
   const wrap = `<div class="wrap"><main>\n${parts.filter(Boolean).join("\n")}\n</main></div>`;
   const code = blocks.filter((b) => b.type === "code" || b.type === "diff");
-  if (!code.length) return wrap;
+  if (!code.length && !ctx.chips) return wrap;
   const icons = code.map((b) => (b.type === "diff" ? "diff" : iconKey(b.lang)));
+  if (code.length) icons.push("copy");
+  if (ctx.chips || code.some((b) => b.file)) icons.push("file");
   return `${codeSprite(icons)}\n${wrap}\n<script>${COPY_SCRIPT}</script>`;
 }
 
@@ -136,10 +139,10 @@ export function renderBlock(block, ctx = newCtx()) {
     }
     case "callout": {
       const cls = block.tone === "note" ? "note" : `note ${block.tone}`;
-      return `<div class="${cls}"><span class="tag">${escapeHtml(block.title)}</span>\n<div>${block.html}</div></div>`;
+      return `<div class="${cls}"><span class="tag">${escapeHtml(block.title)}</span>\n<div>${fileChips(block.html, ctx)}</div></div>`;
     }
     case "container":
-      return `<div class="${escapeHtml(block.kind)}">\n${block.html}\n</div>`;
+      return `<div class="${escapeHtml(block.kind)}">\n${fileChips(block.html, ctx)}\n</div>`;
     case "chart": return renderChart(block);
     case "stats": return stats(block);
     case "hero": return hero(block);
@@ -159,12 +162,13 @@ export function renderBlock(block, ctx = newCtx()) {
 
 /* ------------------------------------------------------------------ prose */
 
-/** Markdown HTML from the parser, with the four rewrites the shell needs. */
+/** Markdown HTML from the parser, with the five rewrites the shell needs. */
 function prose(block, ctx) {
   let html = renderInlineMath(block.html);
   html = fillMathBlocks(html);
   html = wrapTables(html);
   html = zoomFigures(html, ctx);
+  html = fileChips(html, ctx);
   if (block.lead) html = html.replace(/^<p>/, '<p class="lead">');
   // The list under a "Sources" heading is the provenance list, not body copy.
   if (ctx.heading === "sources") html = html.replace(/^<ul>/, '<ul class="sources">');
@@ -216,6 +220,53 @@ function zoomFigures(html, ctx) {
   return html
     .replace(wrapped, (_, tag) => replace(tag))
     .replace(new RegExp(img.source, "g"), (tag) => replace(tag));
+}
+
+/** Extensions that make a slash-free token a file name (`plan.md`), and the extensionless names that count too. */
+const FILE_EXT = new Set(("ts tsx mts cts js jsx mjs cjs json jsonc md mdx txt html htm css scss sass less " +
+  "py rb rs go java kt kts swift c h cc cpp hpp cs php erl ex exs sh bash zsh fish ps1 sql graphql gql " +
+  "proto xml svg yaml yml toml ini cfg conf lock csv tsv pdf png jpg jpeg gif webp mp4 vue svelte astro " +
+  "prisma tf lua dart zig nix").split(" "));
+const FILE_NAMES = new Set(["Dockerfile", "Makefile", "Gemfile", "Procfile", "Justfile"]);
+
+/**
+ * The path an inline code token names, split from an optional `:42`,
+ * `:12-40` or `:12:5` suffix, or null when it is not a path.
+ *
+ * It is a path when it has no spaces, no URL scheme, and either contains a
+ * `/` (which covers `~/` and `./`) or ends in a known extension. `Next.js`
+ * style names (one capitalised word + `.js`) and `process.env`-style member
+ * access stay code.
+ *
+ * @param {string} text the token's decoded text
+ * @returns {{ path: string, line: string } | null}
+ */
+export function filePath(text) {
+  const m = /^([\w.~@\-/[\]]+?)(:\d+(?:[-:]\d+)?)?$/.exec(text);
+  if (!m) return null;
+  const [, path, line = ""] = m;
+  if (!/[A-Za-z]/.test(path) || /^\/\/|\/\/|^www\./i.test(path)) return null;
+  if (path.includes("/")) return /[^/]/.test(path) && path !== "~/" ? { path, line } : null;
+  if (FILE_NAMES.has(path) || /^\.env(?:\.[\w-]+)?$/.test(path)) return { path, line };
+  const ext = /\.([A-Za-z0-9]+)$/.exec(path)?.[1];
+  if (!ext || !FILE_EXT.has(ext.toLowerCase()) || /^\./.test(path)) return null;
+  if (/^[A-Z][A-Za-z0-9]*\.js$/.test(path)) return null;
+  return { path, line };
+}
+
+/**
+ * Inline code that names a file becomes a chip that copies its path. Code
+ * inside a link or a `<pre>` is left alone: a button cannot sit in a link.
+ */
+function fileChips(html, ctx) {
+  return html.replace(/<a\b[\s\S]*?<\/a>|<pre\b[\s\S]*?<\/pre>|<code>([^<]*)<\/code>/g, (whole, inner) => {
+    if (inner === undefined) return whole;
+    const text = unescapeHtml(inner);
+    const hit = filePath(text);
+    if (!hit) return whole;
+    ctx.chips = true;
+    return pathButton(hit.path, { cls: "file-chip", label: text });
+  });
 }
 
 /* ------------------------------------------------------------------ tiles */

@@ -23,7 +23,8 @@
  * Tokenizer state, shared across the lines of a numbered block.
  * `prev` is the last significant token; `modes` is the JSX nesting stack
  * (`"jsx"` for element children, `"{"` for an expression inside JSX); `tag` is
- * the JSX tag currently open, with the stack depth it was opened at.
+ * the JSX tag currently open, with the stack depth it was opened at. `lang` is
+ * the tokenizer key (`tokKey`), so a Vue block tokenizes as `html`.
  *
  * @typedef {{ lang: string, prev: string, bol: boolean, cmd: boolean,
  *   declared: Set<string>, modes: string[], tag: { closing: boolean, depth: number } | null }} State
@@ -46,30 +47,58 @@ const KEYWORDS = {
   sql: words("select from where group by order having join left right inner outer on as insert into values update set delete limit offset with and or not null is in create table primary key references returning distinct"),
   rust: words("as async await break const continue crate dyn else enum extern fn for if impl in let loop match mod move mut pub ref return static struct super trait type unsafe use where while"),
   go: words("break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var"),
+  erlang: words("after and andalso band begin bnot bor bsl bsr bxor case catch cond div end fun if let not of or orelse receive rem try when xor"),
+  elixir: words("after alias and case catch cond def defdelegate defexception defguard defimpl defmacro defmodule defp defprotocol defstruct do else end fn for if import in not or quote raise receive require rescue try unless unquote use when with"),
+  ruby: words("alias and begin break case class def do else elsif end ensure for if in module next not or redo require rescue retry return super then undef unless until when while yield attr_reader attr_writer attr_accessor private protected public"),
+  java: words("abstract assert boolean break byte case catch char class continue default do double else enum extends final finally float for if implements import instanceof int interface long native new package permits private protected public record return sealed short static super switch synchronized throw throws transient try var void volatile while yield"),
+  kotlin: words("as break by class companion continue data do else enum for fun if import in init inline interface internal is lateinit object open operator override package private protected public reified return sealed super suspend throw try typealias val var when while"),
+  swift: words("as associatedtype async await break case catch class continue default defer deinit do else enum extension fallthrough fileprivate for func guard if import in init inout internal is let mutating open operator private protocol public repeat rethrows return some static struct subscript super switch throw throws try typealias var where while"),
+  c: words("auto bool break case char class const constexpr continue default delete do double else enum extern float for goto if inline int long namespace new noexcept nullptr operator private protected public register return short signed sizeof static static_cast struct switch template throw try typedef typename union unsigned using virtual void volatile while"),
+  cs: words("abstract as async await base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern finally fixed float for foreach get goto if implicit in init int interface internal is lock long namespace new object operator out override params private protected public readonly record ref return sbyte sealed set short sizeof static string struct switch throw try typeof uint ulong unchecked unsafe ushort using var virtual void volatile while yield"),
+  php: words("abstract and array as break callable case catch class clone const continue declare default do echo else elseif empty enum extends final finally fn for foreach function global goto if implements include include_once instanceof interface isset list match namespace new or print private protected public readonly require require_once return static switch throw trait try unset use var while xor yield"),
+  graphql: words("query mutation subscription fragment on type input enum interface union scalar schema extend directive implements repeatable"),
+  proto: words("syntax package import option message enum service rpc returns repeated optional required map oneof reserved stream extend extensions to max edition"),
+  // The next four have their own rule sets; these lists are what those rules consult.
+  dockerfile: words("FROM RUN CMD LABEL MAINTAINER EXPOSE ENV ADD COPY ENTRYPOINT VOLUME USER WORKDIR ARG ONBUILD STOPSIGNAL HEALTHCHECK SHELL AS"),
+  makefile: words("include -include sinclude ifeq ifneq ifdef ifndef else endif define endef export unexport override vpath"),
+  env: words("export"),
+  ini: words("true false yes no on off"),
 };
 
-/** Languages with their own rule set rather than a keyword list. */
-const RULE_LANGS = ["json", "yaml", "html", "xml", "css", "md", "toml"];
+/** Languages with their own rule set rather than the C-like one. */
+const RULE_LANGS = ["json", "yaml", "html", "xml", "css", "md", "toml", "dockerfile", "makefile", "env", "ini"];
 
+// Info-string spellings -> the canonical key, which picks the icon.
 const ALIASES = {
   typescript: "ts", tsx: "ts", mts: "ts", cts: "ts", javascript: "js", jsx: "js", mjs: "js", cjs: "js",
   python: "py", py3: "py", bash: "sh", shell: "sh", zsh: "sh", console: "sh",
   golang: "go", rs: "rust", markdown: "md", mdx: "md", tml: "toml", yml: "yaml", svg: "xml",
+  erl: "erlang", ex: "elixir", exs: "elixir", rb: "ruby", kt: "kotlin", kts: "kotlin",
+  h: "c", "c++": "cpp", cc: "cpp", cxx: "cpp", hpp: "cpp", csharp: "cs", "c#": "cs",
+  docker: "dockerfile", make: "makefile", mk: "makefile", dotenv: "env", cfg: "ini",
+  gql: "graphql", protobuf: "proto", txt: "text", plain: "text", plaintext: "text",
 };
 
-/** Does this language get tokenized at all? */
+// Canonical keys that borrow another language's tokenizer but keep their own icon.
+const SHARED = { cpp: "c", svelte: "html", vue: "html" };
+
+/** The tokenizer a canonical key runs. */
+const tokKey = (key) => SHARED[/** @type {keyof typeof SHARED} */ (key)] ?? key;
+
+/** Does this tokenizer key get tokenized at all? */
 const known = (key) => Boolean(KEYWORDS[key]) || RULE_LANGS.includes(key);
 
 // Word lists the identifier classifier consults.
 const THIS = words("this self");
 const CONSTANTS = words("true false null undefined NaN Infinity None True False nil iota");
-const DECL_VAR = words("const let var mut");
-const DECL_FN = words("function def fn func");
+const DECL_VAR = words("const let var mut val");
+const DECL_FN = words("function def defp fn func fun rpc");
 const DECL_TYPE = words("class struct interface enum trait impl type");
 const BUILTIN_TYPES = {
   ts: words("string number boolean void unknown never any object bigint symbol"),
   go: words("int int8 int16 int32 int64 uint uint8 uint16 uint32 uint64 float32 float64 string bool byte rune error any"),
   rust: words("i8 i16 i32 i64 i128 isize u8 u16 u32 u64 u128 usize f32 f64 bool char str"),
+  proto: words("double float int32 int64 uint32 uint64 sint32 sint64 fixed32 fixed64 sfixed32 sfixed64 bool string bytes"),
 };
 // After one of these a `/` starts a regex literal rather than dividing.
 const REGEX_AFTER_WORD = words("return typeof case do else in of new delete void throw yield await");
@@ -101,6 +130,12 @@ const top = (st) => st.modes[st.modes.length - 1];
 function identifier(word, st, after) {
   const { lang, prev } = st;
   const call = /^\s*\(/.test(after) || (lang === "rust" && after[0] === "!");
+  // Erlang: keywords, then Capitalised variables, calls, and every other bare word is an atom.
+  // It comes before the property check because `.` ends an Erlang clause.
+  if (lang === "erlang") {
+    if (KEYWORDS.erlang.has(word)) return "kw";
+    return /^[A-Z_]/.test(word) ? "var" : call ? "fn" : "const";
+  }
   if (prev === "." || prev === "?.") return call ? "fn" : "prop";
   if (THIS.has(word)) return "this";
   // SQL is case-insensitive: `NULL` is `null`, `SELECT` is `select`.
@@ -254,6 +289,52 @@ const shellAssign = (rest, st) => {
   return { len: m[0].length, html: span("var", m[1]) + span("op", "=") + value };
 };
 
+/** `#include` and friends, only where a line starts. @type {Scanner} */
+const preprocessor = (rest, st) => {
+  const m = st.bol ? /^#\s*[a-z]+/.exec(rest) : null;
+  return m ? { len: m[0].length, html: span("meta", m[0]) } : null;
+};
+
+/** The `<stdio.h>` after an `#include`. @type {Scanner} */
+const includePath = (rest, st) => {
+  const m = st.prev.startsWith("#") ? /^<[\w./+-]+>/.exec(rest) : null;
+  return m ? { len: m[0].length, html: span("str", m[0]) } : null;
+};
+
+/** An Erlang attribute, `-module(…)` or `-export(…)`, at the start of a line. @type {Scanner} */
+const erlAttribute = (rest, st) => {
+  const m = st.bol ? /^-[a-z_]+(?=\s*\()/.exec(rest) : null;
+  return m ? { len: m[0].length, html: span("kw", m[0]) } : null;
+};
+
+/** `:ok`, a Ruby symbol or an Elixir atom; `::` is left to the operator rule. @type {Rule} */
+const ATOM = [/^:[A-Za-z_]\w*[?!]?/, "const"];
+/** `$name`, a PHP or GraphQL variable. @type {Rule} */
+const DOLLAR_VAR = [/^\$[A-Za-z_]\w*/, "var"];
+
+/** Line comments for the C-like rule set; anything absent uses `//`. */
+const LINE_COMMENT = {
+  py: /^#[^\n]*/, sql: /^--[^\n]*/, ruby: /^#[^\n]*/, elixir: /^#[^\n]*/, graphql: /^#[^\n]*/,
+  erlang: /^%[^\n]*/, php: /^(?:\/\/|#)[^\n]*/,
+};
+/** Languages where `/*` is not a comment. */
+const NO_BLOCK_COMMENT = words("ruby elixir erlang graphql");
+
+/**
+ * At most two language-specific rules each, run after comments and before
+ * strings, so an Erlang `'quoted atom'` is not taken for a string and a Ruby
+ * `@ivar` is not taken for a decorator.
+ * @type {Record<string, Rule[]>}
+ */
+const EXTRA = {
+  erlang: [erlAttribute, [/^'(?:[^'\\\n]|\\.)*'/, "const"]],
+  elixir: [ATOM],
+  ruby: [ATOM, [/^@@?[A-Za-z_]\w*/, "var"]],
+  php: [DOLLAR_VAR, [/^<\?(?:php|=)?|^\?>/, "meta"]],
+  graphql: [DOLLAR_VAR],
+  c: [preprocessor, includePath],
+};
+
 /* ------------------------------------------------------------ rule sets */
 
 // Rules run in order; the first that matches at the cursor wins.
@@ -322,9 +403,12 @@ function rulesFor(lang) {
       ...base,
       [/^<!--[\s\S]*?-->/, "com"],
       [/^<!DOCTYPE[^>\n]*>/i, "kw"],
+      // Svelte's `{#if}` `{:else}` `{/each}` `{@html}` blocks.
+      [/^\{[#/:@][a-z]+/, "kw"],
       [/^<\/?(?=[A-Za-z])/, "punc"],
+      // A Vue `v-` directive reads as a keyword, any other `name=` as an attribute.
       [/^[A-Za-z][\w:-]*/, (w, st, after) =>
-        st.prev === "<" || st.prev === "</" ? "tag" : /^\s*=/.test(after) ? "attr" : null],
+        st.prev === "<" || st.prev === "</" ? "tag" : w.startsWith("v-") ? "kw" : /^\s*=/.test(after) ? "attr" : null],
       [/^"(?:[^"\\]|\\.)*"|^'(?:[^'\\]|\\.)*'/, "str"],
       [/^&[#\w]+;/, "esc"],
       [/^\/?>|^=/, "punc"],
@@ -348,6 +432,61 @@ function rulesFor(lang) {
       [/^[^\s{};:,()]+/, null],
     ];
   }
+  if (lang === "dockerfile") {
+    return [
+      ...base,
+      [/^#[^\n]*/, "com"],
+      [/^--[\w-]+/, "flag"],
+      [/^\$(?:\{[^}\n]*\}|[A-Za-z_]\w*)/, "var"],
+      [/^"(?:[^"\\]|\\.)*"|^'[^']*'/, "str"],
+      // An instruction opens a line; `AS` names a build stage mid-line.
+      [/^[A-Za-z_][\w./:@-]*/, (w, st) =>
+        (st.bol && KEYWORDS.dockerfile.has(w.toUpperCase())) || w === "AS" ? "kw" : null],
+      [/^[^\s]/, null],
+    ];
+  }
+  if (lang === "makefile") {
+    return [
+      ...base,
+      [/^#[^\n]*/, "com"],
+      [/^\$(?:\([^)\n]*\)|\{[^}\n]*\}|[@<^*?%+])/, "var"],
+      [/^"(?:[^"\\]|\\.)*"|^'[^']*'/, "str"],
+      // At the start of a line a word is a variable (`CC :=`) or a target (`build:`).
+      [/^-?[.\w/%-]+/, (w, st, after) => {
+        if (KEYWORDS.makefile.has(w)) return "kw";
+        if (!st.bol) return null;
+        if (/^[ \t]*(?:::?=|[+?!]?=)/.test(after)) return "var";
+        return /^[ \t]*:/.test(after) ? "fn" : null;
+      }],
+      [/^[:+?!]?=|^:/, "op"],
+      [/^[^\s]/, null],
+    ];
+  }
+  if (lang === "env") {
+    return [
+      ...base,
+      [/^#[^\n]*/, "com"],
+      [/^[A-Za-z_][\w.-]*(?=\s*=)/, "key"],
+      [/^[A-Za-z_]\w*/, (w, st) => (st.bol && KEYWORDS.env.has(w) ? "kw" : null)],
+      [/^=/, "op"],
+      [/^"(?:[^"\\]|\\.)*"|^'[^']*'/, "str"],
+      [/^\$\{?[A-Za-z_]\w*\}?/, "var"],
+      [/^[^\s"'$]+/, null],
+    ];
+  }
+  if (lang === "ini") {
+    return [
+      ...base,
+      [/^[;#][^\n]*/, "com"],
+      [/^\[[^\]\n]*\]/, "tag"],
+      [/^[\w.-]+(?=[ \t]*[=:])/, "key"],
+      [/^"(?:[^"\\]|\\.)*"|^'[^']*'/, "str"],
+      [/^[A-Za-z]+\b/, (w) => (KEYWORDS.ini.has(w.toLowerCase()) ? "kw" : null)],
+      [/^-?\d+(?:\.\d+)?\b/, "num"],
+      [/^[=:]/, "op"],
+      [/^[^\s;#=:"']+/, null],
+    ];
+  }
   if (lang === "sh") {
     return [
       ...base,
@@ -368,8 +507,9 @@ function rulesFor(lang) {
   return [
     ...base,
     ...(cLike ? /** @type {Rule[]} */ ([jsxText, jsxClose, jsxAttr]) : []),
-    [lang === "py" ? /^#[^\n]*/ : lang === "sql" ? /^--[^\n]*/ : /^\/\/[^\n]*/, "com"],
-    [/^\/\*[\s\S]*?\*\//, "com"],
+    [LINE_COMMENT[lang] ?? /^\/\/[^\n]*/, "com"],
+    ...(NO_BLOCK_COMMENT.has(lang) ? [] : /** @type {Rule[]} */ ([[/^\/\*[\s\S]*?\*\//, "com"]])),
+    ...(EXTRA[lang] ?? []),
     ...(cLike ? /** @type {Rule[]} */ ([template, regex, jsxOpen]) : []),
     ...(lang === "py" ? /** @type {Rule[]} */ ([fString]) : []),
     [/^(?:[rRbBuU]{0,2})(?:"""[\s\S]*?"""|'''[\s\S]*?''')/, "str"],
@@ -451,6 +591,11 @@ const S = (d, color, w = 1.4) =>
   `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
 const LETTER_S = "M12.6 8.7c-.2-.5-.7-.8-1.3-.8-.8 0-1.3.4-1.3 1 0 1.4 2.8.8 2.8 2.4 0 .7-.6 1.1-1.4 1.1-.7 0-1.2-.3-1.5-.8";
 const SHIELD = "M2 1.5h12l-1.1 12.2L8 15l-4.9-1.3z";
+const HEXAGON = "M8 1.2l6 3.4v6.8L8 14.8 2 11.4V4.6z";
+const ANGLES = "M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5";
+/** A hexagon with a white C, the C-family mark; `extra` draws the ++ or #. */
+const cMark = (fill, extra = "") =>
+  `<path d="${HEXAGON}" fill="${fill}"/>${S(extra ? "M7.6 5.9a2.6 2.6 0 1 0 0 4.2" : "M10.3 6a2.8 2.8 0 1 0 0 4", "#fff", 1.5)}${extra}`;
 
 const ICONS = {
   ts: `<rect x="1.5" y="1.5" width="13" height="13" rx="2" fill="#3178c6"/>${S("M3.6 8h4.2M5.7 8v5", "#fff", 1.3)}${S(LETTER_S, "#fff", 1.2)}`,
@@ -470,7 +615,36 @@ const ICONS = {
   md: `<rect x="1" y="3.5" width="14" height="9" rx="1.5" fill="#083fa1"/>${S("M3.5 10.5v-5l2 2.3 2-2.3v5M11 5.5v4.5M9.3 8.5l1.7 2 1.7-2", "#fff", 1.1)}`,
   toml: `<rect x="1.5" y="1.5" width="13" height="13" rx="2" fill="#9c4121"/>${S("M4.5 5h7M8 5v7", "#fff", 1.5)}`,
   diff: S("M8 2.5v6M5 5.5h6", "#98c379", 1.5) + S("M5 12h6", "#e06c75", 1.5),
-  code: S("M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5", "#abb2bf"),
+  xml: S(`${ANGLES}M9.2 3.5l-2.4 9`, "#f1662a"),
+  erlang: S("M12.8 8.4H3.6C3.6 5.7 5.4 3.8 8 3.8s4.2 1.7 4.2 4M12.3 11.6c-1 1-2.3 1.6-4 1.6-2.6 0-4.6-2-4.6-4.7", "#b83998", 1.7),
+  elixir: `<path d="M8 1.2C5.4 4.8 3.8 7.6 3.8 10.1a4.2 4.2 0 0 0 8.4 0c0-2.5-1.6-5.3-4.2-8.9z" fill="#8e5ea8"/>` +
+    S("M7 6.5c-.9 1.4-1.4 2.6-1.4 3.6 0 1 .6 1.8 1.5 2.1", "#fff", .9),
+  ruby: `<path d="M4.5 2.5h7l3 3.5L8 14 1.5 6z" fill="#cc342d"/>` +
+    S("M1.5 6h13M4.5 2.5 5.6 6 8 14l2.4-8 1.1-3.5M5.6 6 8 2.5 10.4 6", "rgba(255,255,255,.55)", .8),
+  java: S("M3.5 7.5h8v3a3 3 0 0 1-3 3h-2a3 3 0 0 1-3-3zM11.5 8.4h.9a1.5 1.5 0 0 1 0 3h-1.1", "#e76f00", 1.3) +
+    S("M6 1.8c-.9.9.9 1.8 0 2.8M8.6 1.8c-.9.9.9 1.8 0 2.8", "#5382a1", 1.1),
+  kotlin: `<path d="M2 2h12L8 8l6 6H2z" fill="#a97bff"/>`,
+  swift: `<rect x="1.5" y="1.5" width="13" height="13" rx="3" fill="#f05138"/>` +
+    S("M3.8 9.4c2.4 2 5.6 2.8 8 1.4M5 4.6c1.9 1.9 4.2 3.6 6.3 4.3M10.8 3.6c1.5 1.9 1.8 4.6 1 7.2", "#fff", 1.1),
+  c: cMark("#5c8fd6"),
+  cpp: cMark("#f34b7d", S("M9.4 8h2M10.4 7v2M11.9 8h2M12.9 7v2", "#fff", .9)),
+  cs: cMark("#9b4f96", S("M10.2 6.4v3.2M11.8 6.4v3.2M9.5 7.3h3M9.5 8.7h3", "#fff", .8)),
+  php: `<ellipse cx="8" cy="8" rx="7" ry="4.6" fill="#777bb4"/>` +
+    S("M3.2 10.2V6.2h1.2a1 1 0 0 1 0 2.1H3.2M6.8 5v4.2M6.8 7.3c.3-.6.7-.9 1.2-.9.6 0 .9.4.9 1v1.8M10.6 10.2V6.2h1.2a1 1 0 0 1 0 2.1h-1.2", "#fff", .85),
+  dockerfile: `<path fill="#2496ed" d="M2.5 7h2v2h-2zM5 7h2v2H5zM7.5 7h2v2h-2zM5 4.5h2v2H5zM7.5 4.5h2v2h-2zM7.5 2h2v2h-2z` +
+    `M1.3 9.6h11.5c.5-.7.9-1.6 1-2.4.5 0 1 .2 1.4.5-.4.8-1.2 1.4-2.1 1.5C12 12.2 9.6 14 6.2 14 3.6 14 1.9 12.5 1.3 9.6z"/>`,
+  makefile: `<rect x="1.5" y="1.5" width="13" height="13" rx="2" fill="#427819"/>${S("M4.5 11.5v-7L8 8.5l3.5-4v7", "#fff", 1.3)}`,
+  env: `<circle cx="5" cy="8" r="2.8" fill="none" stroke="#e5d559" stroke-width="1.4"/>${S("M7.8 8H14M12 8v2.4M14 8v1.8", "#e5d559", 1.4)}`,
+  ini: S("M2.5 4.5h11M2.5 8h11M2.5 11.5h11", "#d1dbe0", 1.1) +
+    `<circle cx="5.5" cy="4.5" r="1.5" fill="#d1dbe0"/><circle cx="10.5" cy="8" r="1.5" fill="#d1dbe0"/><circle cx="7" cy="11.5" r="1.5" fill="#d1dbe0"/>`,
+  graphql: S("M8 1.8l5.4 3.1v6.2L8 14.2l-5.4-3.1V4.9zM8 1.8l5.4 9.3H2.6z", "#e10098", 1) +
+    [[8, 1.8], [13.4, 4.9], [13.4, 11.1], [8, 14.2], [2.6, 11.1], [2.6, 4.9]]
+      .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.2" fill="#e10098"/>`).join(""),
+  svelte: S("M11.4 3.4C10 2.1 7.8 2 6.2 3.2L4.4 4.6c-1.4 1-1.7 3-.6 4.4M4.6 12.6c1.4 1.3 3.6 1.4 5.2.2l1.8-1.4c1.4-1 1.7-3 .6-4.4M9.8 6 6.2 10", "#ff3e00", 1.6),
+  vue: `<path d="M1 2.5h3.2L8 9l3.8-6.5H15L8 14.5z" fill="#41b883"/><path d="M4.2 2.5h2.4L8 5l1.4-2.5h2.4L8 9z" fill="#35495e"/>`,
+  text: S("M3 4h10M3 7h10M3 10h10M3 13h6", "#fff", 1.3),
+  code: S(ANGLES, "#abb2bf"),
+  file: S("M4 1.5h5l3.5 3.5v9.5H3.5V1.5zM9 1.5V5h3.5", "currentColor", 1.2),
   copy: S("M5.5 2.5h-1A1.5 1.5 0 0 0 3 4v9a1.5 1.5 0 0 0 1.5 1.5h7A1.5 1.5 0 0 0 13 13V4a1.5 1.5 0 0 0-1.5-1.5h-1", "currentColor", 1.3) +
     `<rect x="5.5" y="1.25" width="5" height="2.5" rx=".8" fill="none" stroke="currentColor" stroke-width="1.3"/>`,
 };
@@ -479,64 +653,87 @@ const ICONS = {
 export function iconKey(lang) {
   const key = langKey(lang);
   if (!key) return "";
-  if (key === "xml") return "html";
-  return key in ICONS ? key : "code";
+  return key in ICONS && !UI_ICONS.has(key) ? key : "code";
 }
+
+/** Sprite entries that are interface glyphs, never a language's icon. */
+const UI_ICONS = words("copy file");
 
 const useIcon = (key, cls) =>
   `<svg class="${cls}" viewBox="0 0 16 16" aria-hidden="true"><use href="#icon-${key}"/></svg>`;
 
 /**
- * The hidden sprite holding each icon the document uses, plus the clipboard
- * glyph. Emitted once at the top of the body.
+ * The hidden sprite holding each icon the document uses. Emitted once at the
+ * top of the body.
  *
- * @param {Iterable<string>} keys icon keys from `iconKey`
+ * @param {Iterable<string>} keys icon keys from `iconKey`, plus `copy` and
+ *   `file` when a Copy button or a path is on the page
  */
 export function codeSprite(keys) {
-  const symbols = [...new Set([...keys, "copy"])].filter((k) => k in ICONS)
+  const symbols = [...new Set(keys)].filter((k) => k in ICONS)
     .map((k) => `<symbol id="icon-${k}" viewBox="0 0 16 16">${ICONS[/** @type {keyof typeof ICONS} */ (k)]}</symbol>`);
   return `<svg class="sprite" aria-hidden="true" focusable="false">${symbols.join("")}</svg>`;
 }
 
 /**
- * The Copy button's behaviour: one delegated listener, no inline handlers.
- * Buttons ship `hidden` and this reveals them, so a reader with scripts
- * blocked never sees a button that does nothing. The source comes from the
- * block's `<template class="src">`, so the copy is the raw text, never the
- * highlighted markup or the line numbers. Without the Clipboard API (or when
- * it refuses) the code is selected instead, ready for Ctrl+C.
+ * The copy behaviour: one delegated listener, no inline handlers.
+ *
+ * A block's Copy button ships `hidden` and this reveals it, so a reader with
+ * scripts blocked never sees a button that does nothing. Its text comes from
+ * the block's `<template class="src">`, so the copy is the raw source, never the
+ * highlighted markup or the line numbers.
+ *
+ * A path (`button[data-path]`: a file header or an inline file chip) copies
+ * just its `data-path` and says "Copied" on itself through `data-state`. With
+ * scripts blocked it still reads as the path.
+ *
+ * Without the Clipboard API (or when it refuses) the text is selected instead,
+ * ready for Ctrl+C.
  */
 export const COPY_SCRIPT = `(() => {
   for (const b of document.querySelectorAll("button.copy")) b.hidden = false;
   const timers = new WeakMap();
+  const later = (el, fn) => {
+    clearTimeout(timers.get(el));
+    timers.set(el, setTimeout(fn, 1200));
+  };
+  const select = (node) => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const sel = getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  };
+  const write = (text, ok, fail) => {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, fail);
+    else fail();
+  };
   document.addEventListener("click", (e) => {
-    const btn = e.target instanceof Element ? e.target.closest("button.copy") : null;
-    const block = btn && btn.closest(".code");
+    const el = e.target instanceof Element ? e.target.closest("button.copy, button[data-path]") : null;
+    if (!el) return;
+    if (el.dataset.path !== undefined) {
+      const say = (word) => {
+        el.dataset.state = word;
+        later(el, () => { delete el.dataset.state; });
+      };
+      write(el.dataset.path, () => say("copied"), () => { select(el); say("selected"); });
+      return;
+    }
+    const block = el.closest(".code");
     if (!block) return;
-    const label = btn.querySelector("span");
-    const text = block.querySelector("template.src").content.textContent;
+    const label = el.querySelector("span");
     const say = (word) => {
       label.textContent = word;
-      clearTimeout(timers.get(btn));
-      timers.set(btn, setTimeout(() => { label.textContent = "Copy"; }, 1200));
+      later(el, () => { label.textContent = "Copy"; });
     };
-    const select = () => {
-      const range = document.createRange();
-      range.selectNodeContents(block.querySelector("pre"));
-      const sel = getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-      say("Selected");
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(() => say("Copied"), select);
-    } else select();
+    write(block.querySelector("template.src").content.textContent, () => say("Copied"),
+      () => { select(block.querySelector("pre")); say("Selected"); });
   });
 })();`;
 
 /* ------------------------------------------------------------ blocks */
 
-/** Resolve an info-string language to a tokenizer key. */
+/** Resolve an info-string language to its canonical key, the one that picks the icon. */
 export function langKey(lang) {
   const key = String(lang ?? "").toLowerCase();
   return ALIASES[key] ?? key;
@@ -544,21 +741,65 @@ export function langKey(lang) {
 
 /** Highlight a fragment of source. Unknown languages come back escaped, not styled. */
 export function highlight(src, lang) {
-  const key = langKey(lang);
+  const key = tokKey(langKey(lang));
   return known(key) ? tokenize(String(src), key) : esc(src);
 }
+
+/** Text escaped for a double-quoted attribute. */
+const escAttr = (s) => esc(s).replace(/"/g, "&quot;");
 
 const COPY_BUTTON =
   `<button type="button" class="copy" aria-label="Copy code" hidden>${useIcon("copy", "copy-icon")}<span>Copy</span></button>`;
 
 /**
- * The header: `file` (or a title) on the left with the language on the right,
- * or the language alone on the left; the Copy button always at the far right.
+ * A path that copies itself: a file glyph, then the directory and the file
+ * name as separate spans, so a narrow screen can ellipsize the directory and
+ * keep the name. Used by a file header (`code-path`) and an inline chip
+ * (`file-chip`). `label` is what shows (a chip keeps its `:42`); `path` is what
+ * lands on the clipboard.
+ *
+ * @param {string} path
+ * @param {{ cls: string, label?: string }} opts
  */
-function header(name, lang, icon) {
+export function pathButton(path, { cls, label = path }) {
+  const cut = label.lastIndexOf("/", label.length - 2) + 1;
+  const dir = label.slice(0, cut);
+  return `<button type="button" class="${cls}" data-path="${escAttr(path)}" title="Copy path">` +
+    `${useIcon("file", "file-icon")}<span class="p-text">${dir ? `<span class="p-dir">${esc(dir)}</span>` : ""}` +
+    `<span class="p-name">${esc(label.slice(cut))}</span></span></button>`;
+}
+
+/**
+ * The header. With nothing to name, the language sits alone on the left.
+ * Otherwise the left carries the path (with its `L12–40` range), then the
+ * title after a middot, and the language moves right, before Copy.
+ *
+ * @param {{ lang: string, icon: string, path?: string, range?: string, title?: string }} parts
+ */
+function header({ lang, icon, path = "", range = "", title = "" }) {
   const label = lang ? `<span class="code-lang">${icon ? useIcon(icon, "code-icon") : ""}${esc(lang)}</span>` : "";
-  const left = name ? `<span class="code-file">${esc(name)}</span>` : label;
-  return `<div class="code-head">${left}<span class="code-tools">${name ? label : ""}${COPY_BUTTON}</span></div>`;
+  const names = [];
+  if (path) {
+    names.push(pathButton(path, { cls: "code-path" }) + (range ? `<span class="code-range">L${esc(range)}</span>` : ""));
+  }
+  if (title) names.push(`<span class="code-title">${esc(title)}</span>`);
+  if (!names.length) return `<div class="code-head">${label}<span class="code-tools">${COPY_BUTTON}</span></div>`;
+  return `<div class="code-head"><span class="code-name">${names.join('<span class="code-sep">·</span>')}</span>` +
+    `<span class="code-tools">${label}${COPY_BUTTON}</span></div>`;
+}
+
+/**
+ * `range=12-40` (or `12`): the first line number, and the label shown as
+ * `L12–40`. Anything else is ignored.
+ *
+ * @param {string} range
+ * @returns {{ start: number, label: string } | null}
+ */
+export function parseRange(range) {
+  const m = /^(\d+)(?:\s*[-–]\s*(\d+))?$/.exec(String(range ?? "").trim());
+  if (!m) return null;
+  const start = Number(m[1]);
+  return { start, label: m[2] ? `${start}–${Number(m[2])}` : String(start) };
 }
 
 /** The raw source the Copy button reads, inert inside a template. */
@@ -568,17 +809,25 @@ const trimSource = (src) => String(src).replace(/^\n/, "").replace(/\s+$/, "");
 
 /**
  * A fenced code block with a header (label, icon, Copy) and optional line
- * numbers. `lang` is a display label as well as the tokenizer selector.
+ * numbers. `lang` is a display label as well as the tokenizer selector. A
+ * `range` turns numbering on and starts it at the range's first line; its
+ * `L12–40` label shows next to the path, so only a file block carries it.
+ *
+ * @param {string} src
+ * @param {{ lang?: string, file?: string, title?: string, range?: string, lines?: boolean }} [opts]
  */
-export function code(src, { lang = "", file = "", lines: showLines = false } = {}) {
-  const key = langKey(lang);
+export function code(src, { lang = "", file = "", title = "", range = "", lines = false } = {}) {
+  const canon = langKey(lang);
+  const key = tokKey(canon);
   const text = trimSource(src);
+  const rng = parseRange(range);
   // Line numbering tokenizes line by line, sharing one state: splitting
   // already-tokenized markup on newlines would cut a multiline span in half.
   let body;
-  if (showLines) {
+  if (lines || rng) {
     const st = newState(key);
-    body = `<ol class="code-lines">${text.split("\n").map((l) => {
+    const start = rng && rng.start !== 1 ? ` style="counter-reset:l ${rng.start - 1}"` : "";
+    body = `<ol class="code-lines"${start}>${text.split("\n").map((l) => {
       st.bol = true;
       st.cmd = true;
       const cell = known(key) ? tokenize(l, key, st) : esc(l);
@@ -587,42 +836,52 @@ export function code(src, { lang = "", file = "", lines: showLines = false } = {
   } else {
     body = `<code>${known(key) ? tokenize(text, key) : esc(text)}</code>`;
   }
-  return `<div class="code has-head">${header(file, lang, iconKey(lang))}<pre>${body}</pre>${source(text)}</div>`;
+  const head = header({ lang, icon: iconKey(lang), path: file, range: rng?.label, title });
+  const cls = canon === "text" ? "code has-head plain" : "code has-head";
+  return `<div class="${cls}">${head}<pre>${body}</pre>${source(text)}</div>`;
 }
 
-/** A unified diff: a +/- sign column, then the line, coloured per marker. No tokenizer. */
-export function diff(src, { file = "" } = {}) {
+/**
+ * A unified diff: a +/- sign column, then the line, coloured per marker. No tokenizer.
+ *
+ * @param {string} src
+ * @param {{ file?: string, title?: string }} [opts]
+ */
+export function diff(src, { file = "", title = "" } = {}) {
   const text = trimSource(src);
   const rows = text.split("\n").map((l) => {
     const kind = l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : l.startsWith("@") ? "hunk" : "ctx";
     if (kind === "hunk" || !l) return `<li class="d-${kind}">${esc(l) || "&nbsp;"}</li>`;
     return `<li class="d-${kind}"><span class="d-sign">${esc(l[0])}</span>${esc(l.slice(1))}</li>`;
   });
-  return `<div class="code has-head diff">${header(file, "diff", "diff")}` +
+  return `<div class="code has-head diff">${header({ lang: "diff", icon: "diff", path: file, title })}` +
     `<pre><ol class="diff-lines">${rows.join("")}</ol></pre>${source(text)}</div>`;
 }
 
 /**
- * Render one `code` block. The header shows `file=` when present and falls back
- * to `title=`, so a block can be captioned without naming a path.
+ * Render one `code` block: a snippet (language only), a file block (`file=`,
+ * with an optional `range=`) or a captioned one (`title=`). File and title can
+ * both be set.
  *
  * @param {CodeBlock} block
  */
 export function renderCode(block) {
   return code(block?.source ?? "", {
     lang: block?.lang ?? "",
-    // `||`, not `??`: normalize fills an absent `file` with "".
-    file: block?.file || block?.title || "",
+    // `||`, not `??`: normalize fills absent strings with "".
+    file: block?.file || "",
+    title: block?.title || "",
+    range: block?.range || "",
     lines: block?.lines === true,
   });
 }
 
 /**
- * Render one `diff` block; `title=` names the change, since a diff spans files.
+ * Render one `diff` block; `title=` names the change, `file=` the file it touches.
  * @param {DiffBlock} block
  */
 export function renderDiff(block) {
-  return diff(block?.source ?? "", { file: block?.title ?? "" });
+  return diff(block?.source ?? "", { file: block?.file || "", title: block?.title || "" });
 }
 
 export { esc, KEYWORDS, RULE_LANGS };

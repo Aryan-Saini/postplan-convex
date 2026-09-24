@@ -53,9 +53,9 @@
 /** @typedef {BlockBase & { type: "slides", info: string, data: unknown }} SlidesBlock */
 /** @typedef {BlockBase & { type: "video", info: string, data: unknown }} VideoBlock */
 
-/** @typedef {BlockBase & { type: "code", lang: string, info: string, source: string, file?: string, title?: string, lines?: true }} CodeBlock */
+/** @typedef {BlockBase & { type: "code", lang: string, info: string, source: string, file?: string, title?: string, range?: string, lines?: true }} CodeBlock */
 
-/** @typedef {BlockBase & { type: "diff", info: string, source: string, title?: string }} DiffBlock */
+/** @typedef {BlockBase & { type: "diff", info: string, source: string, file?: string, title?: string }} DiffBlock */
 
 /** Display LaTeX, from a `math` fence or `$$…$$`. WP4 converts `tex` to MathML.
  * @typedef {BlockBase & { type: "math", tex: string }} MathBlock */

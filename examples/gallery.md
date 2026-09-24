@@ -247,11 +247,16 @@ ordered drop-off, a schedule, one panel per item, and a share of a whole that is
 
 ## Code
 
-Highlighted at build time into plain spans in One Dark Pro, with a language icon, an optional filename
-header and line numbers. Copy puts the raw source on the clipboard; with scripts blocked the button is
-hidden and the block still reads the same.
+Highlighted at build time into plain spans in One Dark Pro. Three headers: a snippet names only its
+language, a file block leads with the path it lands at (click the path to copy it), and a caption block
+leads with a title. Copy puts the raw source on the clipboard; with scripts blocked the button is hidden
+and the block still reads the same.
 
-```ts file=src/upload.ts lines
+In prose, a backticked path renders as a chip that copies itself: the handler lives in `convex/http.ts`,
+the plan in `./plan.md`, the token in `~/.npmrc`, and the tokenizer at `src/render/code.js:42`. A command
+like `npm install marked` or a word like `lines` stays inline code.
+
+```ts file=src/upload.ts range=12-20
 export async function upload(html: string, filename: string): Promise<Draft> {
   const bytes = new TextEncoder().encode(html).length;
   if (bytes > MAX_HTML_BYTES) throw new UploadError(`${bytes} bytes exceeds the cap`);
@@ -263,7 +268,7 @@ export async function upload(html: string, filename: string): Promise<Draft> {
 }
 ```
 
-```tsx file=src/DraftCard.tsx
+```tsx file=src/DraftCard.tsx lines
 export function DraftCard({ draft, onOpen }: { draft: Draft; onOpen: (id: string) => void }) {
   const label = `v${draft.versionNumber} · ${draft.warnings.length} warnings`;
   return (
@@ -275,7 +280,7 @@ export function DraftCard({ draft, onOpen }: { draft: Draft; onOpen: (id: string
 }
 ```
 
-```python title="Retry a flaky upload"
+```python file=scripts/retry.py title="Retry a flaky upload"
 @retry(times=3, backoff=0.5)
 def upload(self, path: str) -> dict:
     html = self.render(path)
@@ -287,14 +292,31 @@ def upload(self, path: str) -> dict:
 
 ```bash
 npx postplan-aryan@latest upload ./plan.html --description "Q3 warehouse plan"
-# Draft  https://abundant-cardinal-686.convex.site/d/q3-warehouse-8fk2
+# Draft  https://postplan.example/d/q3-warehouse-8fk2
 # Version 4
 ```
 
-```json file=response
+```erlang file=src/upload_server.erl
+-module(upload_server).
+-export([start/1]).
+
+%% Accept uploads until told to stop.
+start(Limit) ->
+    receive
+        {upload, From, Html} when byte_size(Html) =< Limit ->
+            From ! {ok, draft_id(Html)},
+            start(Limit);
+        {upload, From, _Html} ->
+            From ! {error, too_large},
+            start(Limit);
+        stop -> ok
+    end.
+```
+
+```json title="Upload response"
 {
   "draftId": "q3-warehouse-8fk2",
-  "publicUrl": "https://abundant-cardinal-686.convex.site/d/q3-warehouse-8fk2",
+  "publicUrl": "https://postplan.example/d/q3-warehouse-8fk2",
   "versionNumber": 4,
   "warnings": []
 }
