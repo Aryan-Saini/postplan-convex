@@ -239,7 +239,7 @@ test("the gallery renders one sprite, one script and a <use> per header, and pas
   const blocks = doc.blocks.filter((b) => b.type === "code" || b.type === "diff").length;
   assert.equal((html.match(/<svg class="sprite"/g) ?? []).length, 1);
   assert.equal((html.match(/<script>/g) ?? []).length, 1);
-  assert.equal((html.match(/<use href="#icon-copy"\/>/g) ?? []).length, blocks);
+  assert.equal((html.match(/aria-label="Copy code"/g) ?? []).length, blocks);
   assert.equal((html.match(/<svg class="code-icon"[^>]*><use href="#icon-/g) ?? []).length, blocks);
   assert.equal((html.match(/<template class="src">/g) ?? []).length, blocks);
   // Every icon referenced is defined exactly once.

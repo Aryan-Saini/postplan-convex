@@ -94,7 +94,7 @@ test("a task list renders checkbox items and leaves plain items alone", () => {
 
 test('an image titled "zoom" becomes a figure linked to a lightbox overlay', () => {
   const html = body('![Dashboard](https://example.test/d.png "zoom")\n');
-  assert.match(html, /<figure class="img"><a class="zoom" href="#lb-1"><img src="https:\/\/example\.test\/d\.png" alt="Dashboard"><\/a><figcaption>Dashboard<\/figcaption><\/figure>/);
+  assert.match(html, /<figure class="img"><a class="zoom" href="#lb-1"><img src="https:\/\/example\.test\/d\.png" alt="Dashboard"><\/a><span class="media-fail"[^>]*>.*?<\/span><\/span><figcaption>Dashboard<\/figcaption><\/figure>/);
   assert.match(html, /<div class="lightbox" id="lb-1"><a href="#_"><img src="https:\/\/example\.test\/d\.png" alt="Dashboard"><\/a><div class="cap">Dashboard<\/div><\/div>/);
   // The overlay is lifted out of the paragraph and sits at the end of the document.
   assert.ok(html.indexOf('class="lightbox"') > html.indexOf('class="zoom"'));
@@ -102,20 +102,20 @@ test('an image titled "zoom" becomes a figure linked to a lightbox overlay', () 
 
   // A line under the image is its caption; the alt stays on the img only.
   const captioned = body('![Dashboard, Sep 21](https://example.test/d.png "zoom")\nAfter the S3 move\n');
-  assert.match(captioned, /alt="Dashboard, Sep 21"><\/a><figcaption>After the S3 move<\/figcaption><\/figure>/);
+  assert.match(captioned, /alt="Dashboard, Sep 21"><\/a><span class="media-fail"[^>]*>.*?<\/span><\/span><figcaption>After the S3 move<\/figcaption><\/figure>/);
   assert.match(captioned, /<div class="cap">After the S3 move<\/div>/);
   assert.equal(captioned.match(/Dashboard, Sep 21/g)?.length, 2, "alt appears on the thumbnail and overlay img only");
 
   // An untitled image stays inline prose.
   const plain = body("Text.\n\n![Plain](https://example.test/p.png)\n");
-  assert.match(plain, /<p><img src="https:\/\/example\.test\/p\.png" alt="Plain"><\/p>/);
+  assert.match(plain, /<p><img src="https:\/\/example\.test\/p\.png" alt="Plain"><span class="media-fail"[^>]*>.*?<\/span><\/span><\/p>/);
   assert.doesNotMatch(plain, /lightbox/);
 });
 
 test("a slideshow gets a snap track, anchored dots and a count", () => {
   const html = body('```slides\n[{"src":"https://e.test/1.png","caption":"List"},{"src":"https://e.test/2.png","caption":"Detail"}]\n```\n');
   assert.match(html, /<div class="slides"><div class="track">/);
-  assert.match(html, /<figure id="slides-1-1"><img src="https:\/\/e\.test\/1\.png" alt="List" loading="lazy"><figcaption>1 · List<\/figcaption><\/figure>/);
+  assert.match(html, /<figure id="slides-1-1"><img src="https:\/\/e\.test\/1\.png" alt="List" loading="lazy"><span class="media-fail"[^>]*>.*?<\/span><\/span><figcaption>1 · List<\/figcaption><\/figure>/);
   assert.match(html, /<div class="dots"><a href="#slides-1-1" aria-label="Slide 1"><\/a><a href="#slides-1-2" aria-label="Slide 2"><\/a><\/div>/);
   assert.match(html, /<div class="count">2 slides<\/div>/);
 });
@@ -268,7 +268,8 @@ test("examples/gallery.md renders with no errors", () => {
   assert.match(html, /<title>Postplan component gallery<\/title>/);
   assert.match(html, /<div class="contents">/);
   assert.match(html, /<ul class="sources">/);
-  assert.ok(Buffer.byteLength(html) < 120 * 1024, "the gallery stays under 120 KB");
+  // 128 KB: the media failure panels and their script added about 10 KB.
+  assert.ok(Buffer.byteLength(html) < 128 * 1024, "the gallery stays under 128 KB");
 });
 
 test("an unknown block type renders nothing rather than half a block", () => {

@@ -5,10 +5,11 @@
  * `shell.js` defines. Charts, code, diagrams and math are drawn by `charts.js`,
  * `code.js`, `diagram.js` and `math.js`, which this module only dispatches to.
  *
- * The markdown blocks WP1 hands over are already HTML, so prose needs five
+ * The markdown blocks WP1 hands over are already HTML, so prose needs six
  * rewrites on the way out: inline math spans and display-math placeholders
  * become MathML, tables gain their scroll wrapper, an image titled `zoom`
- * becomes a lightbox figure, and inline code that names a file becomes a chip.
+ * becomes a lightbox figure, inline code that names a file becomes a chip, and
+ * every image gets its hidden load-failure panel (`media.js`).
  *
  * @module render/blocks
  */
@@ -18,18 +19,20 @@ import { meter, renderChart, sparkline } from "./charts.js";
 import { COPY_SCRIPT, codeSprite, iconKey, pathButton, renderCode, renderDiff } from "./code.js";
 import { renderFlow, renderSequence } from "./diagram.js";
 import { renderInlineMath, renderMathBlock, unescapeHtml } from "./math.js";
+import { MEDIA_SCRIPT, withFailPanels } from "./media.js";
 
 /** @typedef {import("./ir.js").Block} Block */
 /** @typedef {import("./ir.js").Doc} Doc */
 /** @typedef {import("./ir.js").Meta} Meta */
 
 /** Per-document render state: lightbox ids are document-wide, a `sources`
- * heading changes how the list under it is styled, and `chips` records that a
- * file chip needs the copy script and the file glyph.
- * @typedef {{ lightboxes: string[], zoomCount: number, heading: string, chips: boolean }} Ctx */
+ * heading changes how the list under it is styled, `chips` records that a
+ * file chip needs the copy script and the file glyph, and `media` that a
+ * failure panel needs the media script and its icons.
+ * @typedef {{ lightboxes: string[], zoomCount: number, heading: string, chips: boolean, media: boolean }} Ctx */
 
 /** @returns {Ctx} */
-const newCtx = () => ({ lightboxes: [], zoomCount: 0, heading: "", chips: false });
+const newCtx = () => ({ lightboxes: [], zoomCount: 0, heading: "", chips: false, media: false });
 
 /* ------------------------------------------------------------------ document */
 
@@ -37,9 +40,10 @@ const newCtx = () => ({ lightboxes: [], zoomCount: 0, heading: "", chips: false 
  * Render a whole document body: title, byline, contents strip, then every block
  * in order, with any lightbox overlays collected at the end.
  *
- * A document with code blocks or file chips also gets, once each, the icon
- * sprite they reference (top of the body) and the copy script (end of the
- * body). A document with neither carries neither, so it stays script-free.
+ * A document with code blocks, file chips or media also gets, once each, the
+ * icon sprite they reference (top of the body) and the document script (end
+ * of the body): the copy script, plus the media script when there are failure
+ * panels. A document with none of them stays script-free.
  *
  * @param {Doc} doc
  * @returns {string}
@@ -65,11 +69,13 @@ export function renderBody(doc) {
 
   const wrap = `<div class="wrap"><main>\n${parts.filter(Boolean).join("\n")}\n</main></div>`;
   const code = blocks.filter((b) => b.type === "code" || b.type === "diff");
-  if (!code.length && !ctx.chips) return wrap;
+  if (!code.length && !ctx.chips && !ctx.media) return wrap;
   const icons = code.map((b) => (b.type === "diff" ? "diff" : iconKey(b.lang)));
-  if (code.length) icons.push("copy");
+  if (code.length || ctx.media) icons.push("copy");
   if (ctx.chips || code.some((b) => b.file)) icons.push("file");
-  return `${codeSprite(icons)}\n${wrap}\n<script>${COPY_SCRIPT}</script>`;
+  if (ctx.media) icons.push("image-off", "video-off", "open");
+  const script = ctx.media ? `${COPY_SCRIPT}\n${MEDIA_SCRIPT}` : COPY_SCRIPT;
+  return `${codeSprite(icons)}\n${wrap}\n<script>${script}</script>`;
 }
 
 /**
@@ -139,22 +145,22 @@ export function renderBlock(block, ctx = newCtx()) {
     }
     case "callout": {
       const cls = block.tone === "note" ? "note" : `note ${block.tone}`;
-      return `<div class="${cls}"><span class="tag">${escapeHtml(block.title)}</span>\n<div>${fileChips(block.html, ctx)}</div></div>`;
+      return `<div class="${cls}"><span class="tag">${escapeHtml(block.title)}</span>\n<div>${withFailPanels(fileChips(block.html, ctx), ctx)}</div></div>`;
     }
     case "container":
-      return `<div class="${escapeHtml(block.kind)}">\n${fileChips(block.html, ctx)}\n</div>`;
+      return `<div class="${escapeHtml(block.kind)}">\n${withFailPanels(fileChips(block.html, ctx), ctx)}\n</div>`;
     case "chart": return renderChart(block);
     case "stats": return stats(block);
     case "hero": return hero(block);
     case "timeline": return timeline(block);
-    case "slides": return slides(block);
-    case "video": return video(block);
+    case "slides": return withFailPanels(slides(block), ctx);
+    case "video": return withFailPanels(video(block), ctx);
     case "code": return renderCode(block);
     case "diff": return renderDiff(block);
     case "flow": return renderFlow(block);
     case "sequence": return renderSequence(block);
     case "math": return renderMathBlock(block.tex);
-    case "html": return block.html;
+    case "html": return withFailPanels(block.html, ctx);
     case "footnotes": return footnotes(block);
     default: return "";
   }
@@ -162,13 +168,14 @@ export function renderBlock(block, ctx = newCtx()) {
 
 /* ------------------------------------------------------------------ prose */
 
-/** Markdown HTML from the parser, with the five rewrites the shell needs. */
+/** Markdown HTML from the parser, with the six rewrites the shell needs. */
 function prose(block, ctx) {
   let html = renderInlineMath(block.html);
   html = fillMathBlocks(html);
   html = wrapTables(html);
   html = zoomFigures(html, ctx);
   html = fileChips(html, ctx);
+  html = withFailPanels(html, ctx);
   if (block.lead) html = html.replace(/^<p>/, '<p class="lead">');
   // The list under a "Sources" heading is the provenance list, not body copy.
   if (ctx.heading === "sources") html = html.replace(/^<ul>/, '<ul class="sources">');

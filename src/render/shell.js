@@ -36,6 +36,8 @@ export const CSS = `
   --mono:"Cascadia Code","Cascadia Mono","JetBrains Mono",Menlo,Monaco,ui-monospace,monospace;
 }
 *{box-sizing:border-box}
+/* A component's display:block/flex must not beat the hidden attribute. */
+[hidden]{display:none!important}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.5 var(--sans);
   font-feature-settings:"kern" 1}
@@ -183,6 +185,28 @@ svg.chart{display:block;overflow:visible;min-width:520px}
 .lightbox a{display:grid;place-items:center;width:100%;height:100%;cursor:zoom-out;text-decoration:none}
 .lightbox img{max-width:100%;max-height:92vh;width:auto;height:auto;border-radius:6px}
 .lightbox .cap{position:fixed;left:0;right:0;bottom:16px;text-align:center;font-size:14px;color:var(--ink)}
+
+/* ---- media load failure ---- */
+/* The script reveals a panel in the figure's own box. The aspect ratio comes
+   from the element's width/height when it has them; content taller than the
+   box grows it rather than overflowing. Both lines are white; size carries the
+   hierarchy. */
+.media-fail{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:100%;
+  aspect-ratio:16/9;padding:20px 16px;border:1px solid var(--line);border-radius:8px;background:var(--surface);
+  text-align:center;color:var(--ink)}
+.mf-icon{width:20px;height:20px;flex:none;margin-bottom:8px}
+.mf-title{font-size:17px;line-height:1.4}
+.mf-cause{font-size:14px;line-height:1.45;max-width:46ch}
+.mf-cause:empty{display:none}
+.mf-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:12px}
+.media-fail a.copy{text-decoration:none}
+.img a.zoom[aria-disabled]{cursor:default}
+/* The no-script floor: Chrome and Firefox draw an image's pseudo-elements only
+   when it failed, so a broken image shows its alt text in a hairline box. */
+img{position:relative}
+img::before{content:"";position:absolute;inset:0;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+img::after{content:attr(alt);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:12px 16px;font:14px/1.45 var(--sans);color:var(--ink);text-align:center}
 
 /* ---- slideshow: scroll-snap, dots are anchors ---- */
 .slides{margin:0 0 8px}
@@ -353,7 +377,8 @@ const escText = (v) =>
 /**
  * Wrap body HTML in a complete, self-contained document: one <style>, no
  * external stylesheet, no webfont. The only script is the inline one a body
- * with code blocks or file chips brings for copying.
+ * with code blocks, file chips or media brings for copying and for revealing
+ * media failure panels.
  *
  * @param {{ title: string, body: string, generator?: string }} opts
  *   `generator` is stamped as `<meta name="generator">` so a reader (and

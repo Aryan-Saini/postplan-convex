@@ -647,6 +647,10 @@ const ICONS = {
   file: S("M4 1.5h5l3.5 3.5v9.5H3.5V1.5zM9 1.5V5h3.5", "currentColor", 1.2),
   copy: S("M5.5 2.5h-1A1.5 1.5 0 0 0 3 4v9a1.5 1.5 0 0 0 1.5 1.5h7A1.5 1.5 0 0 0 13 13V4a1.5 1.5 0 0 0-1.5-1.5h-1", "currentColor", 1.3) +
     `<rect x="5.5" y="1.25" width="5" height="2.5" rx=".8" fill="none" stroke="currentColor" stroke-width="1.3"/>`,
+  // The media failure panel: a framed landscape and a camera, each struck through, and the Open pill's arrow.
+  "image-off": S("M13.5 10.5V3.5a1 1 0 0 0-1-1H5.5M2.5 4.5v8a1 1 0 0 0 1 1h8M2.5 10.5l3-3 3 3M9.5 8.5l1-1 3 3M1.5 1.5l13 13", "currentColor", 1.3),
+  "video-off": S("M8 4.5h1.5a1 1 0 0 1 1 1V8M10.5 11v.5a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h1M10.5 7.5l4-2.5v6.5l-2.5-1.5M1.5 1.5l13 13", "currentColor", 1.3),
+  open: S("M9.5 2.5h4v4M13.5 2.5 7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3", "currentColor", 1.3),
 };
 
 /** The icon a language label carries: its own, or the generic `</>` glyph. */
@@ -657,7 +661,7 @@ export function iconKey(lang) {
 }
 
 /** Sprite entries that are interface glyphs, never a language's icon. */
-const UI_ICONS = words("copy file");
+const UI_ICONS = words("copy file image-off video-off open");
 
 const useIcon = (key, cls) =>
   `<svg class="${cls}" viewBox="0 0 16 16" aria-hidden="true"><use href="#icon-${key}"/></svg>`;
@@ -667,7 +671,8 @@ const useIcon = (key, cls) =>
  * top of the body.
  *
  * @param {Iterable<string>} keys icon keys from `iconKey`, plus `copy` and
- *   `file` when a Copy button or a path is on the page
+ *   `file` when a Copy button or a path is on the page, and `image-off`,
+ *   `video-off` and `open` for media failure panels
  */
 export function codeSprite(keys) {
   const symbols = [...new Set(keys)].filter((k) => k in ICONS)
@@ -687,8 +692,12 @@ export function codeSprite(keys) {
  * just its `data-path` and says "Copied" on itself through `data-state`. With
  * scripts blocked it still reads as the path.
  *
+ * A media failure panel's "Copy link" (`button[data-copy]`) copies its
+ * `data-copy` and says "Copied" in its label.
+ *
  * Without the Clipboard API (or when it refuses) the text is selected instead,
- * ready for Ctrl+C.
+ * ready for Ctrl+C. A link has no text on the page to select, so it goes
+ * through a throwaway textarea and `execCommand("copy")`.
  */
 export const COPY_SCRIPT = `(() => {
   for (const b of document.querySelectorAll("button.copy")) b.hidden = false;
@@ -711,6 +720,23 @@ export const COPY_SCRIPT = `(() => {
   document.addEventListener("click", (e) => {
     const el = e.target instanceof Element ? e.target.closest("button.copy, button[data-path]") : null;
     if (!el) return;
+    if (el.dataset.copy !== undefined) {
+      const label = el.querySelector("span");
+      const say = (word) => {
+        label.textContent = word;
+        later(el, () => { label.textContent = "Copy link"; });
+      };
+      write(el.dataset.copy, () => say("Copied"), () => {
+        const area = document.createElement("textarea");
+        area.value = el.dataset.copy;
+        document.body.append(area);
+        area.select();
+        const ok = document.execCommand("copy");
+        area.remove();
+        say(ok ? "Copied" : "Copy failed");
+      });
+      return;
+    }
     if (el.dataset.path !== undefined) {
       const say = (word) => {
         el.dataset.state = word;
