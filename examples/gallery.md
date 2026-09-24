@@ -428,16 +428,29 @@ $$
 
 When the document is a set of UI variants, each frame is labelled and laid out for side-by-side comparison.
 The `html` fence is the escape hatch: emitted verbatim, inheriting the document's tokens, and policy-checked
-with the rest of the page.
+with the rest of the page. Inside it, colour utilities
+mark direction, status and series.
 
 ```html
 <div class="mocks">
-  <div class="mock"><div class="mock-head">A · Tiles</div><div class="mock-body">
-    <div class="k small">Published</div><div class="mock-big">1,284</div>
-    <div class="small">+18.4% vs August</div></div></div>
-  <div class="mock"><div class="mock-head">B · Row</div><div class="mock-body">
-    <div class="mock-row"><span class="small">Published</span><span class="mock-big">1,284</span></div>
-    <div class="mock-row"><span class="small">Rejected</span><span class="mock-big">3.1%</span></div>
+  <div class="mock"><div class="mock-head">A · Watchlist</div><div class="mock-body">
+    <div class="ticker"><span class="sym dot-c1">NVDA</span><span class="px">$132.40</span><span class="delta up">+2.1%</span></div>
+    <div class="ticker"><span class="sym dot-c2">AAPL</span><span class="px">$228.15</span><span class="delta down">−0.8%</span></div>
+    <div class="ticker"><span class="sym dot-c3">MSFT</span><span class="px">$431.02</span><span class="delta up">+0.6%</span></div>
+    <div class="ticker"><span class="sym dot-c4">TSLA</span><span class="px">$251.77</span><span class="delta down">−3.4%</span></div>
+    <div class="ticker"><span class="sym dot-c5">AMZN</span><span class="px">$193.60</span><span class="delta up">+1.2%</span></div>
+  </div></div>
+  <div class="mock"><div class="mock-head">B · Status</div><div class="mock-body">
+    <div class="ticker"><span class="sym">API</span><span class="pill bg-up up">Healthy</span></div>
+    <div class="ticker"><span class="sym">Uploads</span><span class="pill bg-up up">Healthy</span></div>
+    <div class="ticker"><span class="sym">Renderer</span><span class="pill bg-warn warn">Degraded</span></div>
+    <div class="ticker"><span class="sym">Webhooks</span><span class="pill bg-down critical">Down</span></div>
+  </div></div>
+  <div class="mock"><div class="mock-head">C · Tiles</div><div class="mock-body">
+    <div class="mock-grid">
+      <div><div class="small">Published</div><div class="mock-big">1,284</div><div class="small delta up">+18.4%</div></div>
+      <div><div class="small">Rejected</div><div class="mock-big">3.1%</div><div class="small delta down">+0.9 pts</div></div>
+    </div>
   </div></div>
 </div>
 ```

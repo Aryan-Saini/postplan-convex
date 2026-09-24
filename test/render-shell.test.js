@@ -236,6 +236,33 @@ test("containers and html fences pass through as the classes the shell styles", 
   assert.match(body('```html\n<div class="mocks">A</div>\n```\n'), /<div class="mocks">A<\/div>/);
 });
 
+test("mock colour utilities exist, scoped to html fences, in palette colours only", () => {
+  const rule = (sel) => new RegExp(`${sel.replace(/[.()]/g, "\\$&")}\\{[^}]*\\}`);
+  const tones = [".fence :is(.up,.good):not(.note,.chip)", ".fence :is(.down,.bad,.critical):not(.note,.chip)",
+    ".fence .warn:not(.note,.chip)", ".fence .serious", ".fence .delta", ".fence .pill", ".ticker", ".mock-grid"];
+  for (const sel of tones) assert.match(CSS, rule(sel), sel);
+  for (let i = 1; i <= 8; i++) {
+    assert.match(CSS, new RegExp(`\\.fence \\.c${i}\\{color:var\\(--s${i}\\)\\}`));
+    assert.match(CSS, new RegExp(`\\.fence \\.bg-c${i}\\{--wash:var\\(--s${i}\\)\\}`));
+    assert.match(CSS, new RegExp(`\\.fence \\.dot-c${i}\\{--dot:var\\(--s${i}\\)\\}`));
+  }
+  for (const t of ["up", "down", "warn"]) {
+    assert.match(CSS, new RegExp(`\\.fence \\.bg-${t}\\{--wash:`));
+    assert.match(CSS, new RegExp(`\\.fence \\.dot-${t}\\{--dot:`));
+  }
+  // Every rule in the utility block reads a token; none brings its own hex.
+  const block = CSS.slice(CSS.indexOf("/* ---- colour utilities"), CSS.indexOf("/* ---- footnotes"));
+  assert.deepEqual(block.replace(/background:#262624/, "").match(/#[0-9a-f]{3,8}\b/gi), null);
+});
+
+test("an html fence keeps its class names and is wrapped in the .fence scope", () => {
+  const src = '<div class="ticker"><span class="sym dot-c1">NVDA</span><span class="delta up">+2.1%</span></div>';
+  const html = body(`\`\`\`html\n${src}\n\`\`\`\n`);
+  assert.ok(html.includes(`<div class="fence">${src}</div>`), html);
+  // Prose never gets the scope, so a stray class name there stays white.
+  assert.doesNotMatch(body("Up and down.\n"), /class="fence"/);
+});
+
 /* ------------------------------------------------------------------ assembly */
 
 test("a data fence can load its rows from a file beside the document", () => {

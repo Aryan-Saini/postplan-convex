@@ -22,7 +22,8 @@ export const CSS = `
   /* No grey text. Every glyph in the document is white and hierarchy is carried
      by size and weight: metadata at 12-14px regular, body at 17px, labels at
      600. Hairlines, panels, dots and the chart palette keep their own colour,
-     and so do the syntax-highlight tokens, which are not grey. */
+     and so do the syntax-highlight tokens, which are not grey. The one other
+     exception is the colour utilities an html fence may use (see .fence). */
   --ink:#fff;                /* every glyph */
   --mark:#898781;            /* dots and other non-text marks, never a glyph */
   --grid:#2c2c2a;
@@ -351,6 +352,49 @@ math{font-size:19px;color:var(--ink)}
 .mock-big{font-size:22px;font-weight:600;color:var(--ink);letter-spacing:-.02em}
 .mock-row{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px}
 .mock-row:first-child{margin-top:0}
+/* a stock-list row: symbol, price, signed change, a hairline between rows. The
+   symbol takes the slack, so a row of symbol + pill works as a status line too. */
+.ticker{display:flex;gap:12px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.ticker:first-child{border-top:0;padding-top:0}
+.ticker:last-child{padding-bottom:0}
+.ticker .sym{flex:1 1 auto;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ticker .px,.ticker .delta{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ticker .delta{min-width:56px}
+/* tiles inside a mock on one hairline grid: two columns, .three for three */
+.mock-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.mock-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.mock-grid > *{background:var(--surface);padding:10px 12px;min-width:0}
+
+/* ---- colour utilities for html fences ----
+   The one place besides syntax tokens where a glyph may carry colour. The
+   renderer wraps every html fence in .fence (display:contents, so layout is
+   unchanged) and these rules are scoped to it, so prose stays white. Palette
+   only: the eight series slots and the status tokens. Colour in a mock means
+   something (up, down, a series); never decoration. */
+.fence{display:contents}
+.fence :is(.up,.good):not(.note,.chip){color:var(--good)}
+.fence :is(.down,.bad,.critical):not(.note,.chip){color:var(--critical)}
+.fence .warn:not(.note,.chip){color:var(--warn)}
+.fence .serious{color:var(--serious)}
+.fence .c1{color:var(--s1)} .fence .c2{color:var(--s2)} .fence .c3{color:var(--s3)} .fence .c4{color:var(--s4)}
+.fence .c5{color:var(--s5)} .fence .c6{color:var(--s6)} .fence .c7{color:var(--s7)} .fence .c8{color:var(--s8)}
+.fence .delta{font-weight:600;font-variant-numeric:tabular-nums}
+.fence .pill{display:inline-flex;align-items:center;gap:7px;padding:2px 10px;border-radius:999px;
+  background:#262624;white-space:nowrap;font-size:13px;line-height:1.4}
+/* washes: the tone at 14% over the surface, for chips and rows; text stays white unless a tone is added */
+.fence .bg-c1{--wash:var(--s1)} .fence .bg-c2{--wash:var(--s2)} .fence .bg-c3{--wash:var(--s3)}
+.fence .bg-c4{--wash:var(--s4)} .fence .bg-c5{--wash:var(--s5)} .fence .bg-c6{--wash:var(--s6)}
+.fence .bg-c7{--wash:var(--s7)} .fence .bg-c8{--wash:var(--s8)}
+.fence .bg-up{--wash:var(--good)} .fence .bg-down{--wash:var(--critical)} .fence .bg-warn{--wash:var(--warn)}
+.fence [class*="bg-"]{background:color-mix(in srgb,var(--wash) 14%,transparent)}
+/* dots: an 8px disc before the text */
+.fence .dot-c1{--dot:var(--s1)} .fence .dot-c2{--dot:var(--s2)} .fence .dot-c3{--dot:var(--s3)}
+.fence .dot-c4{--dot:var(--s4)} .fence .dot-c5{--dot:var(--s5)} .fence .dot-c6{--dot:var(--s6)}
+.fence .dot-c7{--dot:var(--s7)} .fence .dot-c8{--dot:var(--s8)}
+.fence .dot-up{--dot:var(--good)} .fence .dot-down{--dot:var(--critical)} .fence .dot-warn{--dot:var(--warn)}
+.fence [class*="dot-"]::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;
+  background:var(--dot);margin-right:7px;vertical-align:.08em}
 
 /* ---- footnotes ---- */
 sup.fn{font-size:.72em;line-height:0}

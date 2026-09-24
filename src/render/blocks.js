@@ -163,7 +163,8 @@ export function renderBlock(block, ctx = newCtx()) {
     case "flow": return renderFlow(block);
     case "sequence": return renderSequence(block);
     case "math": return renderMathBlock(block.tex);
-    case "html": return withFailPanels(block.html, ctx);
+    // .fence scopes the mock colour utilities to fence output; it is display:contents.
+    case "html": return `<div class="fence">${withFailPanels(block.html, ctx)}</div>`;
     case "footnotes": return footnotes(block);
     default: return "";
   }
