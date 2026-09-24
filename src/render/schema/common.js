@@ -242,9 +242,27 @@ export function isoMs(v) {
   return Date.parse(`${v}T00:00:00Z`);
 }
 
-/** An https / data URL for an image, poster or clip. */
-export function wantUrl(ctx, v, pointer) {
+/**
+ * The only sources that draw once a document is published: the serving CSP is
+ * `img-src https: data:`, and a relative path has nothing to resolve against.
+ */
+const PUBLISHABLE_SRC = /^(https:\/\/|data:)/i;
+
+/**
+ * The diagnostic for a media src that will not draw, or null when it will.
+ * Shared by the fence validators and the prose scan so both read the same.
+ *
+ * @param {"image" | "video"} kind
+ * @param {string} src
+ */
+export function srcError(kind, src) {
+  if (PUBLISHABLE_SRC.test(src)) return null;
+  return `${kind} src ${JSON.stringify(src)} must be https: or data: (publish it with file-upload first)`;
+}
+
+/** An https: or data: URL for an image, poster or clip. */
+export function wantUrl(ctx, v, pointer, kind = /** @type {"image" | "video"} */ ("image")) {
   if (!wantText(ctx, v, pointer, "a URL")) return false;
-  if (/^(https?:|data:|\.{0,2}\/)/.test(v)) return true;
-  return ctx.at(pointer, `expected an http(s), data: or relative URL, got ${show(v)}`);
+  const message = srcError(kind, v);
+  return message ? ctx.at("", message) : true;
 }

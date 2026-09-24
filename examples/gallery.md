@@ -336,9 +336,20 @@ start(Limit) ->
 
 A figure is the image at full column width, corners at 8px, a hairline border, and the caption underneath in
 white and left aligned, the way the renderer captions an embed with its provenance. A title of `zoom`
-turns the figure into a lightbox target.
+turns the figure into a lightbox target. The alt text doubles as the caption unless a line directly under the
+image gives one. Every src is an https URL from file-upload or a data: URI.
 
-![Dashboard after the S3 move · captured Sep 21](https://abundant-cardinal-686.convex.site/img/dash.png "zoom")
+![Dashboard after the S3 move · captured Sep 21](https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-dash-ync0se04.png "zoom")
+
+A before and after pair sits side by side and stacks on a narrow screen. It goes in an `html` fence, so each half
+carries its own label.
+
+```html
+<div class="pair">
+  <figure class="img"><div class="lbl">Before</div><img src="https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-before-0nukcsng.png" alt="List view before the change"></figure>
+  <figure class="img"><div class="lbl">After</div><img src="https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-after-dn3r3w41.png" alt="List view after the change"></figure>
+</div>
+```
 
 ### Slideshow
 
@@ -346,9 +357,9 @@ Several screenshots of one flow go in a slideshow: swipe or scroll sideways, or 
 does the paging, so it needs no script and degrades to a horizontal strip.
 
 ```slides
-[{"src":"https://abundant-cardinal-686.convex.site/img/1.png","caption":"The list view before the change"},
- {"src":"https://abundant-cardinal-686.convex.site/img/2.png","caption":"Detail pane with the new sparkline column"},
- {"src":"https://abundant-cardinal-686.convex.site/img/3.png","caption":"Settings, unchanged"}]
+[{"src":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-slide-1-7b7u24d4.png","caption":"The list view before the change"},
+ {"src":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-slide-2-xphizy3h.png","caption":"Detail pane with the new sparkline column"},
+ {"src":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-slide-3-p3tv75dp.png","caption":"Settings, unchanged"}]
 ```
 
 ### Video
@@ -357,9 +368,9 @@ Video takes the same figure. Always mp4 with a poster frame, so the block reads 
 playing, and never a bare link. The native player carries the controls.
 
 ```video
-{"src":"https://abundant-cardinal-686.convex.site/img/clip.mp4",
- "poster":"https://abundant-cardinal-686.convex.site/img/poster.png",
- "caption":"Upload flow, 0:42"}
+{"src":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-clip-5wyjcg1z.mp4",
+ "poster":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/gallery-poster-gd1v9qj3.png",
+ "caption":"Placeholder clip, 0:02"}
 ```
 
 ## Diagrams

@@ -121,7 +121,7 @@ const PASSING = {
   sequence: '{"actors":["Agent","Convex"],"msgs":[{"from":"Agent","to":"Convex","label":"POST"},' +
     '{"from":"Convex","to":"Agent","label":"200","dashed":true}]}',
   timeline: '[{"when":"Aug 12","what":"Forked","state":"done","note":"n"},{"when":"Next","what":"Ship"}]',
-  slides: '[{"src":"https://e.example/1.png","caption":"One"},{"src":"/img/2.png"}]',
+  slides: '[{"src":"https://e.example/1.png","caption":"One"},{"src":"data:image/png;base64,iVBORw0KGgo="}]',
   video: '{"src":"https://e.example/c.mp4","poster":"https://e.example/p.png","caption":"0:42"}',
 };
 
@@ -164,6 +164,30 @@ test("a timeline state outside the enum names the enum", () => {
     '```timeline\n[{"when":"Aug","what":"A","state":"soon"}]\n```',
     'plan.md:7 timeline: /0/state expected one of done now next, got "soon"',
   );
+});
+
+/* ============================================================ media src */
+// Published documents draw only https: and data: images, so anything else is
+// caught at render time, wherever the image is written.
+
+const FIX = "must be https: or data: (publish it with file-upload first)";
+
+test("a slide, poster or clip src must be https: or data:", () => {
+  one(
+    '```slides\n[{"src":"https://e.example/1.png"},{"src":"./shots/2.png"}]\n```',
+    `plan.md:7 slides: image src "./shots/2.png" ${FIX}`,
+  );
+  assert.deepEqual(lines(doc('```video\n{"src":"http://e.example/c.mp4","poster":"/p.png"}\n```')), [
+    `plan.md:7 video: video src "http://e.example/c.mp4" ${FIX}`,
+    `plan.md:7 video: image src "/p.png" ${FIX}`,
+  ]);
+});
+
+test("a markdown image or an html fence img must be https: or data:", () => {
+  one('![Dash](dash.png "zoom")', `plan.md:7 image src "dash.png" ${FIX}`);
+  one('```html\n<div class="pair"><img src="before.png?v=1&amp;x=2" alt="B"></div>\n```',
+    `plan.md:7 image src "before.png?v=1&x=2" ${FIX}`);
+  clean(doc('![Dash](https://e.example/d.png "zoom")\n\n![Dot](data:image/png;base64,iVBORw0KGgo=)'));
 });
 
 /* ============================================================ numbers */

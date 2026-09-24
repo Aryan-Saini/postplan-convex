@@ -18,7 +18,9 @@ import { FORMATS, TONES, MAX_SERIES } from "./common.js";
 import { CHART_KINDS, validateChart } from "./chart.js";
 import { validateTiles } from "./tiles.js";
 import { validateFlow, validateSequence, NODE_SHAPES } from "./diagram.js";
-import { validateTimeline, validateSlides, validateVideo, TIMELINE_STATES } from "./media.js";
+import {
+  validateTimeline, validateSlides, validateVideo, validateInlineMedia, TIMELINE_STATES,
+} from "./media.js";
 import { validateHtmlBlock } from "./html.js";
 
 /** @typedef {import("../ir.js").Block} Block */
@@ -88,6 +90,8 @@ export function validateDoc(doc, opts = {}) {
 
     const validate = VALIDATORS[block.type];
     if (validate && !skipBody) validate(errors, block, file);
+    // Prose, callouts, containers and html fences carry their images as HTML.
+    if (typeof block.html === "string") validateInlineMedia(errors, block, file);
   }
 
   return errors;

@@ -100,6 +100,12 @@ test('an image titled "zoom" becomes a figure linked to a lightbox overlay', () 
   assert.ok(html.indexOf('class="lightbox"') > html.indexOf('class="zoom"'));
   assert.doesNotMatch(html, /data-zoom/);
 
+  // A line under the image is its caption; the alt stays on the img only.
+  const captioned = body('![Dashboard, Sep 21](https://example.test/d.png "zoom")\nAfter the S3 move\n');
+  assert.match(captioned, /alt="Dashboard, Sep 21"><\/a><figcaption>After the S3 move<\/figcaption><\/figure>/);
+  assert.match(captioned, /<div class="cap">After the S3 move<\/div>/);
+  assert.equal(captioned.match(/Dashboard, Sep 21/g)?.length, 2, "alt appears on the thumbnail and overlay img only");
+
   // An untitled image stays inline prose.
   const plain = body("Text.\n\n![Plain](https://example.test/p.png)\n");
   assert.match(plain, /<p><img src="https:\/\/example\.test\/p\.png" alt="Plain"><\/p>/);

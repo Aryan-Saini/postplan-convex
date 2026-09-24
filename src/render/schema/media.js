@@ -1,13 +1,15 @@
 /**
- * `timeline`, `slides` and `video` fences.
+ * `timeline`, `slides` and `video` fences, plus the src check for images in
+ * prose and `html` fences.
  *
  * @module render/schema/media
  */
 
 import {
   Ctx, ptr, wantObject, wantNonEmptyArray, wantText, optionalString,
-  optionalEnum, wantUrl, unknownKeys,
+  optionalEnum, wantUrl, unknownKeys, srcError,
 } from "./common.js";
+import { unescapeHtml } from "../math.js";
 
 /** Where an entry sits relative to now; drives the marker's fill. */
 export const TIMELINE_STATES = /** @type {const} */ (["done", "now", "next"]);
@@ -51,8 +53,31 @@ export function validateVideo(errors, block, file) {
   if (!wantObject(ctx, block.data, "", "an object { src }")) return;
   const body = /** @type {Record<string, unknown>} */ (block.data);
 
-  wantUrl(ctx, body.src, "/src");
+  wantUrl(ctx, body.src, "/src", "video");
   if (body.poster !== undefined) wantUrl(ctx, body.poster, "/poster");
   optionalString(ctx, body.caption, "/caption");
   unknownKeys(ctx, body, "", ["src", "poster", "caption"]);
+}
+
+/** An `<img>`, `<video>` or `<source>` tag, and the src-like attributes on one. */
+const MEDIA_TAG = /<(img|video|source)\b[^>]*>/gi;
+const SRC_ATTR = /\s(src|poster)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+
+/**
+ * Every media src in a block's HTML: a markdown `![…](…)`, a callout or
+ * container body, or an `html` fence. Reported at the block's line, since the
+ * HTML no longer knows which source line a tag came from.
+ *
+ * @param {import("../ir.js").RenderError[]} errors
+ * @param {{ html: string, line: number }} block
+ * @param {string} file
+ */
+export function validateInlineMedia(errors, block, file) {
+  for (const [tag, name] of block.html.matchAll(MEDIA_TAG)) {
+    for (const m of tag.matchAll(SRC_ATTR)) {
+      const kind = name.toLowerCase() === "img" || m[1].toLowerCase() === "poster" ? "image" : "video";
+      const message = srcError(kind, unescapeHtml(m[2] ?? m[3] ?? m[4]));
+      if (message) errors.push({ file, line: block.line, block: "", message });
+    }
+  }
 }

@@ -202,23 +202,27 @@ function wrapTables(html) {
  * `![alt](src "zoom")` becomes a figure whose thumbnail links to a `:target`
  * overlay. The overlay is collected on the context and emitted once at the end
  * of the document, so it is never nested inside a paragraph.
+ *
+ * Text on the lines directly under the image, in the same paragraph, is its
+ * caption. Without one the alt text is shown instead, so an image never
+ * carries the same sentence twice.
  */
 function zoomFigures(html, ctx) {
   const img = /<img\b[^>]*\bdata-zoom="1"[^>]*>/;
-  const wrapped = new RegExp(`<p>\\s*(${img.source})\\s*</p>`, "g");
-  const replace = (tag) => {
+  const wrapped = new RegExp(`<p>\\s*(${img.source})([\\s\\S]*?)</p>`, "g");
+  const replace = (tag, caption = "") => {
     const id = `lb-${++ctx.zoomCount}`;
-    const alt = /alt="([^"]*)"/.exec(tag)?.[1] ?? "";
+    const text = caption.replace(/^\s*(?:<br>)?\s*/, "").trim() || (/alt="([^"]*)"/.exec(tag)?.[1] ?? "");
     const clean = tag.replace(/\s*data-zoom="1"/, "");
-    const cap = alt ? `<figcaption>${alt}</figcaption>` : "";
+    const cap = text ? `<figcaption>${text}</figcaption>` : "";
     ctx.lightboxes.push(
       `<div class="lightbox" id="${id}"><a href="#_">${clean}</a>` +
-      (alt ? `<div class="cap">${alt}</div>` : "") + `</div>`,
+      (text ? `<div class="cap">${text}</div>` : "") + `</div>`,
     );
     return `<figure class="img"><a class="zoom" href="#${id}">${clean}</a>${cap}</figure>`;
   };
   return html
-    .replace(wrapped, (_, tag) => replace(tag))
+    .replace(wrapped, (_, tag, caption) => replace(tag, caption))
     .replace(new RegExp(img.source, "g"), (tag) => replace(tag));
 }
 
