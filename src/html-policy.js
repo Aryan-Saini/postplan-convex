@@ -20,6 +20,21 @@ const URL_ATTRS = new Set([
   "xlink:href"
 ]);
 
+// The one <link> a document may carry: an inline favicon. Anything else a link
+// can do (stylesheets, preloads, prefetches) pulls from outside the document.
+const ICON_LINK_ATTRS = new Set(["rel", "href", "type", "sizes"]);
+const ICON_HREF_PREFIXES = ["data:image/svg+xml", "data:image/png"];
+
+/** True for `<link rel="icon" href="data:image/svg+xml…|data:image/png…">` with no other attributes. */
+function isInlineIconLink(node) {
+  const attrs = node.attrs || [];
+  if (!attrs.every((attr) => ICON_LINK_ATTRS.has(attr.name.toLowerCase()))) return false;
+  const get = (name) => String(attrs.find((attr) => attr.name.toLowerCase() === name)?.value ?? "").trim();
+  if (get("rel").toLowerCase() !== "icon") return false;
+  const href = get("href").toLowerCase();
+  return ICON_HREF_PREFIXES.some((prefix) => href.startsWith(prefix));
+}
+
 const BLOCKED_PROTOCOLS = ["javascript:", "vbscript:", "file:"];
 const ALLOWED_SCRIPT_TYPES = new Set(["", "text/javascript", "application/javascript"]);
 
@@ -64,7 +79,7 @@ export function validateHtml(html, options = {}) {
     if (node.tagName) {
       const tagName = node.tagName.toLowerCase();
 
-      if (BLOCKED_TAGS.has(tagName)) {
+      if (BLOCKED_TAGS.has(tagName) && !(tagName === "link" && isInlineIconLink(node))) {
         errors.push(`Blocked <${tagName}> tag found.`);
       }
 

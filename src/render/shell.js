@@ -169,6 +169,8 @@ svg.chart{display:block;overflow:visible;min-width:520px}
 .spark{vertical-align:middle}
 
 /* ---- images and video ---- */
+/* A plain Markdown image (no zoom) otherwise renders at its natural width and overflows a phone column. */
+main img{max-width:100%;height:auto}
 .img{margin:0 0 28px}
 .img img,.img video{display:block;width:100%;height:auto;border-radius:8px;border:1px solid var(--line)}
 .img.plain img{border:0;border-radius:0}
@@ -374,19 +376,43 @@ ol.footnotes a.fn-back:hover{color:var(--ink)}
 const escText = (v) =>
   String(v).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
+/** The document glyph both favicons share: a white page with a folded corner and three lines. */
+const FAVICON_GLYPH =
+  '<path d="M22 13h13l10 10v25a3 3 0 0 1-3 3H22a3 3 0 0 1-3-3V16a3 3 0 0 1 3-3z" fill="#fff"/>' +
+  '<path d="M35 13l10 10h-8a2 2 0 0 1-2-2v-8z" fill="#c7d2fe"/>' +
+  '<rect x="24" y="29" width="16" height="3" rx="1.5" fill="#a5b4fc"/>' +
+  '<rect x="24" y="36" width="16" height="3" rx="1.5" fill="#a5b4fc"/>' +
+  '<rect x="24" y="43" width="10" height="3" rx="1.5" fill="#a5b4fc"/>';
+
+/** The postplan.dev favicon: indigo rounded square. Opt-in with `icon: indigo`. */
+export const FAVICON_INDIGO =
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#4f46e5"/>${FAVICON_GLYPH}</svg>`;
+
+/** True-black square with a 2px #383835 edge (inset 1px so the stroke is not clipped). The default. */
+export const FAVICON_BLACK =
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="1" y="1" width="62" height="62" rx="13" fill="#000" stroke="#383835" stroke-width="2"/>${FAVICON_GLYPH}</svg>`;
+
+/** Frontmatter `icon:` values, first is the default. */
+export const FAVICONS = { black: FAVICON_BLACK, indigo: FAVICON_INDIGO };
+
+/** @typedef {keyof typeof FAVICONS} Icon */
+
 /**
  * Wrap body HTML in a complete, self-contained document: one <style>, no
  * external stylesheet, no webfont. The only script is the inline one a body
  * with code blocks, file chips or media brings for copying and for revealing
  * media failure panels.
  *
- * @param {{ title: string, body: string, generator?: string }} opts
- *   `generator` is stamped as `<meta name="generator">` so a reader (and
+ * @param {{ title: string, body: string, generator?: string, icon?: Icon }} opts
+ *   `title` is the tab title as given, never suffixed. `icon` picks the
+ *   favicon, embedded as a data: URI (default `black`). `generator` is stamped as `<meta name="generator">` so a reader (and
  *   `postplan upload`) can tell a rendered document from a hand-written one.
  * @returns {string}
  */
-export function page({ title, body, generator }) {
+export function page({ title, body, generator, icon = "black" }) {
   const t = escText(title);
+  // The SVGs are ASCII, so btoa (present in Node and the browser) is enough.
+  const favicon = `data:image/svg+xml;base64,${btoa(FAVICONS[icon])}`;
   const stamp = generator ? `\n<meta name="generator" content="${escText(generator)}">` : "";
   return `<!doctype html>
 <html lang="en">
@@ -395,6 +421,7 @@ export function page({ title, body, generator }) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">${stamp}
 <title>${t}</title>
+<link rel="icon" type="image/svg+xml" href="${favicon}">
 <style>${CSS}</style>
 </head>
 <body>

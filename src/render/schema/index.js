@@ -22,6 +22,7 @@ import {
   validateTimeline, validateSlides, validateVideo, validateInlineMedia, TIMELINE_STATES,
 } from "./media.js";
 import { validateHtmlBlock } from "./html.js";
+import { FAVICONS } from "../shell.js";
 
 /** @typedef {import("../ir.js").Block} Block */
 /** @typedef {import("../ir.js").Doc} Doc */
@@ -56,6 +57,7 @@ export function validateDoc(doc, opts = {}) {
   /** @type {RenderError[]} */
   const errors = [];
   if (!doc || !Array.isArray(doc.blocks)) return errors;
+  if (doc.meta) validateMeta(errors, doc.meta, file);
 
   /** @type {Map<string, number>} first line each id was claimed on */
   const ids = new Map();
@@ -95,6 +97,26 @@ export function validateDoc(doc, opts = {}) {
   }
 
   return errors;
+}
+
+const ICONS = Object.keys(FAVICONS);
+const MAX_TAB = 80;
+
+/**
+ * Frontmatter values with a shape: `icon` is an enum, `tab` a short string.
+ * Reported on line 1, where the frontmatter starts; the key names the field.
+ * @param {RenderError[]} errors
+ * @param {Doc["meta"]} meta
+ * @param {string} file
+ */
+function validateMeta(errors, meta, file) {
+  const at = (message) => errors.push({ file, line: 1, block: "frontmatter", message });
+  if (meta.icon !== undefined && !ICONS.includes(meta.icon)) {
+    at(`icon: expected one of ${ICONS.join(" ")}, got ${JSON.stringify(meta.icon)}`);
+  }
+  if (meta.tab !== undefined && (meta.tab === "" || meta.tab.length > MAX_TAB)) {
+    at(`tab: expected 1 to ${MAX_TAB} characters, got ${meta.tab.length}`);
+  }
 }
 
 /**

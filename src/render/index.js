@@ -74,7 +74,7 @@ export function render(input, opts = {}) {
   const ir = parsed.doc;
   if (errors.length) return { html: null, errors, doc, ir };
 
-  const html = page({ title: doc.meta.title, body: renderBody(doc), generator: GENERATOR });
+  const html = page({ title: doc.meta.tab ?? doc.meta.title, body: renderBody(doc), generator: GENERATOR, icon: doc.meta.icon });
 
   const policy = validateHtml(html, {});
   for (const message of policy.errors) {

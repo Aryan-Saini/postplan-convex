@@ -49,6 +49,10 @@ Pick-to-ship is 41 hours against a 24 hour target, and the gap is all putaway.
 ​```
 ```
 
+Two optional keys change the browser tab only: `tab:` sets the `<title>` (up to
+80 characters; the `h1` stays `title:`), and `icon: black | indigo` picks the
+embedded favicon (default `black`).
+
 `upload plan.md` renders to `plan.html` and publishes that, but remembers the
 draft under `plan.md`, so re-uploading the source keeps the same URL.
 

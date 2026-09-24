@@ -16,7 +16,11 @@
  * @typedef {{ file: string, line: number, block: string, message: string }} RenderError
  */
 
-/** @typedef {{ title: string, byline?: string, date?: string, status?: string }} Meta */
+/**
+ * Frontmatter. `tab` overrides the `<title>` (the h1 is always `title`); `icon`
+ * picks the favicon, validated against `FAVICONS` in shell.js.
+ * @typedef {{ title: string, byline?: string, date?: string, status?: string, tab?: string, icon?: import("./shell.js").Icon }} Meta
+ */
 
 /** @typedef {"note"|"good"|"warn"|"critical"} CalloutTone */
 /** @typedef {"center"|"right"|"subtext"|"columns"} ContainerKind */

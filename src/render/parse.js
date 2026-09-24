@@ -19,7 +19,8 @@ import { ALERT_TONES, BLOCK_TYPES, DATA_FENCES, emptyDoc } from "./ir.js";
 /** @typedef {import("./ir.js").RenderError} RenderError */
 
 const DATA_FENCE_SET = new Set(DATA_FENCES);
-const KNOWN_META = new Set(["title", "byline", "date", "status"]);
+const META_KEYS = /** @type {const} */ (["title", "byline", "date", "status", "tab", "icon"]);
+const KNOWN_META = new Set(META_KEYS);
 
 /** Cell tone prefixes allowed in a GFM table cell, mapped to their class suffix. */
 const CELL_TONES = { good: "good", warn: "warn", bad: "bad", flat: "flat" };
@@ -341,7 +342,7 @@ export function parseMarkdown(text, opts = {}) {
   const meta = { title: "" };
   for (const [k, v] of Object.entries(fm.meta)) {
     if (KNOWN_META.has(k)) meta[k] = v;
-    else errors.push({ file, line: fm.lines[k] ?? 1, block: "frontmatter", message: `unknown frontmatter key "${k}"; keys: title byline date status` });
+    else errors.push({ file, line: fm.lines[k] ?? 1, block: "frontmatter", message: `unknown frontmatter key "${k}"; keys: ${META_KEYS.join(" ")}` });
   }
 
   const state = { footnoteOrder: /** @type {string[]} */ ([]) };
@@ -606,7 +607,7 @@ export function parseIr(json, opts = {}) {
   const rawMeta = typeof input.meta === "object" && input.meta !== null ? /** @type {Record<string, unknown>} */ (input.meta) : null;
   if (!rawMeta) bad("meta must be an object with a title");
   else {
-    for (const key of ["title", "byline", "date", "status"]) {
+    for (const key of META_KEYS) {
       const v = rawMeta[key];
       if (v === undefined) continue;
       if (typeof v !== "string") bad(`meta.${key} must be a string`);

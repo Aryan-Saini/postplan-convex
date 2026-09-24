@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { byline, contents, render, renderBlock, renderBody, GENERATOR } from "../src/render/index.js";
 import { parseMarkdown } from "../src/render/parse.js";
+import { CSS, FAVICON_BLACK, FAVICON_INDIGO } from "../src/render/shell.js";
 
 const GALLERY = fileURLToPath(new URL("../examples/gallery.md", import.meta.url));
 
@@ -48,6 +49,49 @@ test("the generator is stamped into the head", () => {
   const { html } = render("# T\n\nLead.\n", { file: "t.md" });
   assert.match(html, /<meta name="generator" content="postplan-render \d+\.\d+\.\d+">/);
   assert.match(GENERATOR, /^postplan-render /);
+});
+
+/** The favicon `<link>` in a rendered page, decoded back to its SVG source. */
+const favicon = (html) => {
+  const m = html.match(/<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml;base64,([^"]+)">/);
+  assert.ok(m, "favicon link present");
+  return Buffer.from(m[1], "base64").toString("utf8");
+};
+
+test("every document embeds the favicon, true black unless icon: indigo", () => {
+  const plain = render("# T\n\nLead.\n", { file: "t.md" });
+  assert.deepEqual(plain.errors, []);
+  assert.ok(favicon(plain.html).startsWith("<svg"));
+  assert.equal(favicon(plain.html), FAVICON_BLACK);
+
+  const indigo = render("---\ntitle: T\nicon: indigo\n---\n\nLead.\n", { file: "t.md" });
+  assert.equal(favicon(indigo.html), FAVICON_INDIGO);
+  const black = render("---\ntitle: T\nicon: black\n---\n\nLead.\n", { file: "t.md" });
+  assert.equal(favicon(black.html), FAVICON_BLACK);
+});
+
+test("an icon outside the enum is an error that names the enum", () => {
+  const { html, errors } = render("---\ntitle: T\nicon: red\n---\n\nLead.\n", { file: "t.md" });
+  assert.equal(html, null);
+  assert.deepEqual(errors.map((e) => e.message), ['icon: expected one of black indigo, got "red"']);
+});
+
+test("tab sets the <title> on its own; title still sets the h1", () => {
+  const { html, errors } = render("---\ntitle: Q3 warehouse plan\ntab: Q3 plan\n---\n\nLead.\n", { file: "t.md" });
+  assert.deepEqual(errors, []);
+  assert.match(html, /<title>Q3 plan<\/title>/);
+  assert.match(html, /<h1>Q3 warehouse plan<\/h1>/);
+  assert.match(render("# Memo\n\nLead.\n", { file: "t.md" }).html, /<title>Memo<\/title>/);
+
+  const long = render(`---\ntitle: T\ntab: ${"x".repeat(81)}\n---\n\nLead.\n`, { file: "t.md" });
+  assert.deepEqual(long.errors.map((e) => e.message), ["tab: expected 1 to 80 characters, got 81"]);
+});
+
+test("images inside the column are capped at its width", () => {
+  assert.match(CSS, /main img\{max-width:100%;height:auto\}/);
+  // A plain image (no zoom title) lands inside <main>, where the cap applies.
+  const { html } = render("# T\n\nLead.\n\n![wide](https://example.test/wide.png)\n", { file: "t.md" });
+  assert.match(html, /<main>[\s\S]*<img src="https:\/\/example\.test\/wide\.png"[\s\S]*<\/main>/);
 });
 
 test("a document with no fences renders as prose in the shell", () => {
