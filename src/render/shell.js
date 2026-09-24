@@ -153,12 +153,14 @@ table.full{width:100%}
 .fig-cap{font-size:14px;color:var(--ink);margin-top:8px}
 svg.chart{display:block;overflow:visible;min-width:520px}
 .fig-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+/* Every chart label gets a true-black halo, so one crossing a bar, line or gridline still reads. */
+.chart text{paint-order:stroke fill;stroke:#000;stroke-width:3px;stroke-linejoin:round}
 .chart .grid{stroke:var(--grid);stroke-width:1}
 .chart .axis{stroke:var(--axis);stroke-width:1}
 .chart .tick{fill:var(--ink);font:12px var(--sans);font-variant-numeric:tabular-nums}
 .chart .tick-y{text-anchor:end} .chart .tick-x{text-anchor:middle}
 .chart .val{fill:var(--ink);font:12px var(--sans);text-anchor:middle;font-variant-numeric:tabular-nums}
-.chart .val-left{text-anchor:start}
+.chart .val-left{text-anchor:start} .chart .val-end{text-anchor:end}
 .chart .cell-val{font:11px var(--sans);text-anchor:middle;font-variant-numeric:tabular-nums}
 .chart .node-label{fill:var(--ink);font:13px var(--sans);text-anchor:middle}
 .chart .edge-label{fill:var(--ink);font:11.5px var(--sans);text-anchor:middle}

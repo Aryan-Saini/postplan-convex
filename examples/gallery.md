@@ -150,10 +150,10 @@ any mark for its value. The palette is the eight-slot categorical set, validated
 ```
 
 ```chart lines
-{"title":"Stage latency","note":"Three series get a legend and a labelled end point.","format":"ms",
+{"title":"Stage latency","note":"Three series get a legend and a labelled end point. S3 put carries a bad tone.","format":"ms",
  "labels":["W1","W2","W3","W4","W5","W6","W7","W8"],
  "series":[{"name":"Validate","values":[18,19,17,18,20,19,18,18]},
-           {"name":"S3 put","values":[180,195,210,240,232,244,220,212]},
+           {"name":"S3 put","values":[180,195,210,240,232,244,220,212],"tone":"bad"},
            {"name":"Serve","values":[70,79,96,121,118,130,118,96]}]}
 ```
 

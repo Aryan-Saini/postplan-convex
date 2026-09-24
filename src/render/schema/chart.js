@@ -72,7 +72,7 @@ function labelsAndSeries(ctx, body) {
     wantText(ctx, s.name, ptr(at, "name"), "a series name");
     numberArrayOfLength(ctx, s.values, ptr(at, "values"), labels.length, "labels");
     unknownKeys(ctx, s, at, ["name", "values", "tone"]);
-    optionalString(ctx, s.tone, ptr(at, "tone"));
+    wantTone(ctx, s.tone, ptr(at, "tone"));
   });
 }
 
@@ -180,7 +180,8 @@ const KINDS = {
         });
       }
     }
-    return ["labels", "values", "totals"];
+    optionalBoolean(ctx, body.higherIsBetter, "/higherIsBetter");
+    return ["labels", "values", "totals", "higherIsBetter"];
   },
 
   scatter(ctx, body) {
