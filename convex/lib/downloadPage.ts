@@ -1,11 +1,14 @@
 import {
   BASE_CSS,
+  EXPIRY_SCRIPT,
   ICON_SPRITE,
   esc,
+  expiryNow,
+  fileSprite,
   fmtDate,
-  fmtExpiry,
   fmtSize,
   header,
+  iconOf,
   kindLabel,
   kindOf,
   type Kind,
@@ -19,7 +22,7 @@ const ROWS_ABOVE = 6;
 /** Text previews are fetched, not streamed, so they are capped rather than trusted. */
 const TEXT_PREVIEW_BYTES = 20480;
 
-type Item = SentFile & { i: number; kind: Kind; label: string; canPreview: boolean };
+type Item = SentFile & { i: number; kind: Kind; icon: string; label: string; canPreview: boolean };
 
 const dlBtn = (it: Item, label: boolean) =>
   `<a class="btn primary${label ? "" : " icononly"}" data-dl href="${esc(it.url)}" download="${esc(it.name)}"${
@@ -81,7 +84,7 @@ function cards(items: Item[]): string {
       const m = media(it, false);
       const top = m
         ? `<div class="top">${m}</div>`
-        : `<div class="top"><div class="tile"><svg class="icon"><use href="#i-${it.kind}"/></svg><span>${esc(
+        : `<div class="top"><div class="tile"><svg class="ftype"><use href="#i-${it.icon}"/></svg><span>${esc(
             it.label,
           )}</span></div></div>`;
       return `<div class="card">${top}
@@ -104,7 +107,7 @@ function rows(items: Item[], total: number): string {
           )}</span><button class="x" type="button" data-close="p${it.i}" aria-label="Close preview"><svg viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>${inline}</div>`
         : panel(it);
       return `<div class="trow">
-<svg class="icon"><use href="#i-${it.kind}"/></svg>
+<svg class="ftype"><use href="#i-${it.icon}"/></svg>
 <div class="tname"><b>${esc(it.name)}</b><span>${fmtSize(it.size)} · ${esc(it.label)}</span></div>
 <div class="tacts">${previewable ? previewBtn(it, false) : ""}${openBtn(it, false)}${copyBtn(it, false)}${dlBtn(it, false)}</div>
 </div>${inlinePanel ? `<div class="panelwrap">${inlinePanel}</div>` : ""}`;
@@ -135,6 +138,7 @@ export function downloadPage(opts: {
       ...f,
       i,
       kind,
+      icon: iconOf(kind, f.name),
       label: kindLabel(kind, f.contentType, f.name),
       canPreview: kind === "pdf" || kind === "text",
     };
@@ -142,6 +146,7 @@ export function downloadPage(opts: {
   const total = files.reduce((sum, f) => sum + f.size, 0);
   const compact = items.length > ROWS_ABOVE;
   const title = reason && reason.trim() ? reason.trim() : "Files for you";
+  const expiry = expiryNow(expiresAt);
 
   const body = items.length
     ? compact
@@ -159,7 +164,7 @@ export function downloadPage(opts: {
 .card .top{background:var(--surface);border-bottom:1px solid var(--line)}
 .card .top img,.card .top video{display:block;width:100%;height:auto;max-height:62vh;object-fit:contain;background:#000}
 .card .tile{display:grid;place-items:center;gap:8px;padding:32px 16px;text-align:center}
-.card .tile .icon{width:34px;height:34px;stroke-width:1.2}
+.card .tile .ftype{width:34px;height:34px}
 .card .tile span{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink)}
 .audiowrap{padding:18px 16px}
 .audiowrap audio{width:100%;display:block}
@@ -173,7 +178,7 @@ export function downloadPage(opts: {
 .card .panelwrap .panel{margin:0 0 15px}
 .tbl{border-top:1px solid var(--line)}
 .trow{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);min-height:56px}
-.trow .icon{width:18px;height:18px}
+.trow .ftype{width:20px;height:20px}
 .tname{min-width:0;flex:1}
 .tname b{display:block;font-weight:500;font-size:15px;overflow-wrap:anywhere;line-height:1.25}
 .tname span{font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums}
@@ -205,18 +210,19 @@ export function downloadPage(opts: {
 .lightbox img{max-width:100%;max-height:88vh;width:auto;border-radius:6px}
 .lightbox .cap{position:fixed;left:0;right:0;bottom:16px;text-align:center;font-size:13.5px;color:var(--ink)}
 </style></head>
-<body>${ICON_SPRITE}
+<body>${ICON_SPRITE}${fileSprite(items.map((it) => it.icon))}
 <main>
 ${header(title, [
   { icon: "cal", text: fmtDate(sentAt) },
   { icon: "stack", text: `${files.length} file${files.length === 1 ? "" : "s"}` },
   { icon: "weight", text: fmtSize(total) },
-  { icon: "clock", text: fmtExpiry(expiresAt) },
+  { icon: "clock", text: expiry.text, tone: expiry.tone, expires: expiresAt },
 ])}
 ${body}
 </main>
 ${items.map(lightbox).join("")}
 <script>
+${EXPIRY_SCRIPT}
 var CAP=${TEXT_PREVIEW_BYTES};
 function flash(el,text){
   var node=el.lastChild, was=null;

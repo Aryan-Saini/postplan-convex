@@ -7,6 +7,8 @@
  * here is inline: no external stylesheet, no external image, no iframe.
  */
 
+import { expiryLabel, fileSymbol, fileType, type FileGroup } from "../../src/render/filetypes.js";
+
 export const esc = (v: string): string =>
   v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -29,7 +31,12 @@ export const fmtExpiry = (expiresAt: number, now = Date.now()): string => {
   return `expires in ${days} day${days === 1 ? "" : "s"}`;
 };
 
-export type Kind = "image" | "video" | "audio" | "pdf" | "text" | "archive" | "sheet" | "file";
+/**
+ * What a file is for the page: the preview behaviour (`image`, `video`, `audio`,
+ * `pdf`, `text`) or, for the rest, the group its type belongs to. The glyph and
+ * label come from the same table a document's `file` fence uses.
+ */
+export type Kind = FileGroup;
 
 /** Content type first, then the extension, because phones send octet-stream a lot. */
 export function kindOf(contentType: string, name: string): Kind {
@@ -38,59 +45,79 @@ export function kindOf(contentType: string, name: string): Kind {
   if (type.startsWith("video/")) return "video";
   if (type.startsWith("audio/")) return "audio";
   if (type === "application/pdf") return "pdf";
-  if (/\.(zip|tar|gz|tgz|bz2|xz|7z|rar)$/i.test(name)) return "archive";
-  if (
-    /spreadsheet|excel/.test(type) ||
-    /\.(xlsx?|xlsm|ods|numbers)$/i.test(name)
-  )
-    return "sheet";
-  if (/\.csv$/i.test(name)) return "sheet";
-  if (
-    type.startsWith("text/") ||
-    type === "application/json" ||
-    type === "application/xml" ||
-    /\.(md|txt|log|json|ya?ml|toml|ini|py|jsx?|tsx?|mjs|cjs|sh|sql|html?|css|rs|go|java|rb|php|c|h|cpp)$/i.test(name)
-  )
-    return "text";
+  const group = fileType(name).group;
+  if (group !== "file") return group;
+  if (type.startsWith("text/") || type === "application/json" || type === "application/xml") return "text";
   return "file";
 }
 
-/** A short label under the name: "PNG image", "Markdown", "ZIP archive". */
+/** What a kind reads as when the name has no extension the table knows. */
+const KIND_FALLBACK: Partial<Record<Kind, string>> = {
+  image: "Image",
+  video: "Video",
+  audio: "Audio",
+  pdf: "PDF document",
+  text: "Text",
+};
+
+/** A short label under the name: "APK · Android package", "PNG · Image", "Markdown". */
 export function kindLabel(kind: Kind, contentType: string, name: string): string {
-  const ext = (name.match(/\.([a-z0-9]+)$/i)?.[1] ?? "").toUpperCase();
-  switch (kind) {
-    case "image":
-      return ext ? `${ext} image` : "Image";
-    case "video":
-      return ext ? `${ext} video` : "Video";
-    case "audio":
-      return ext ? `${ext} audio` : "Audio";
-    case "pdf":
-      return "PDF document";
-    case "archive":
-      return ext ? `${ext} archive` : "Archive";
-    case "sheet":
-      return ext ? `${ext} spreadsheet` : "Spreadsheet";
-    case "text":
-      return ext === "MD" ? "Markdown" : ext ? `${ext} file` : "Text";
-    default:
-      return ext ? `${ext} file` : contentType || "File";
-  }
+  const t = fileType(name);
+  const label = t.group !== "file" ? t.label : KIND_FALLBACK[kind] ?? (t.ext ? "File" : contentType || "File");
+  return t.ext ? `${t.ext.toUpperCase()} · ${label}` : label;
+}
+
+const KIND_ICON: Partial<Record<Kind, string>> = {
+  image: "ft-image",
+  video: "ft-video",
+  audio: "ft-audio",
+  pdf: "ft-pdf",
+  text: "text",
+};
+
+/** The type glyph's key: the name's own when the table knows it, else the kind's, else a blank page. */
+export function iconOf(kind: Kind, name: string): string {
+  const t = fileType(name);
+  return t.group !== "file" ? t.icon : KIND_ICON[kind] ?? "ft-file";
+}
+
+/** The type glyphs a page draws, as symbols `#i-<key>`. Only the ones in use. */
+export function fileSprite(keys: Iterable<string>): string {
+  const symbols = [...new Set(keys)].map((k) => fileSymbol(k, `i-${k}`)).join("");
+  return `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>${symbols}</defs></svg>`;
 }
 
 /**
- * One 20px monoline glyph per kind plus the action glyphs, defined once as SVG
- * symbols and used by reference. No emoji anywhere.
+ * The expiry pill's text and tone as the server writes it: the UTC date when
+ * more than 48 hours out, the countdown inside that. The page script rewrites
+ * it in the reader's zone and ticks it once a minute (`EXPIRY_SCRIPT`).
+ */
+export const expiryNow = (expiresAt: number, now = Date.now()) => expiryLabel(expiresAt, now, { utc: true });
+
+/**
+ * Keeps the `[data-expires]` pill current, once a minute. Embeds
+ * `expiryLabel`'s source, which is self-contained for exactly this.
+ */
+export const EXPIRY_SCRIPT = `(function(){
+  var pill=document.querySelector('.chip[data-expires]');
+  if(!pill)return;
+  var expiryLabel=${expiryLabel};
+  var at=Number(pill.getAttribute('data-expires'));
+  function tick(){
+    var r=expiryLabel(at,Date.now());
+    pill.lastChild.textContent=r.text;
+    pill.className='chip'+(r.tone?' '+r.tone:'');
+  }
+  tick();
+  setInterval(tick,60000);
+})();`;
+
+/**
+ * The 20px monoline action and byline glyphs, defined once as SVG symbols and
+ * used by reference. No emoji anywhere. File-type glyphs are separate
+ * (`fileSprite`), so a page carries only the ones its files need.
  */
 export const ICON_SPRITE = `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-<symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.6" cy="9.6" r="1.7"/><path d="M4 17l4.7-4.7a2 2 0 0 1 2.8 0L20 20"/></symbol>
-<symbol id="i-video" viewBox="0 0 24 24"><rect x="2.5" y="5" width="14" height="14" rx="2.5"/><path d="M16.5 10.2l5-2.7v9l-5-2.7z"/></symbol>
-<symbol id="i-audio" viewBox="0 0 24 24"><path d="M9 16.5V5.2l10-1.8v11.4"/><circle cx="6.4" cy="17.4" r="2.6"/><circle cx="16.4" cy="15.6" r="2.6"/></symbol>
-<symbol id="i-pdf" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 16.5h4"/></symbol>
-<symbol id="i-text" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M10.5 12.2L8.6 14l1.9 1.8M13.5 12.2L15.4 14l-1.9 1.8"/></symbol>
-<symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1.6"/><path d="M5 9v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M10.2 13h3.6"/></symbol>
-<symbol id="i-sheet" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M3 15h18M9.5 9.5V20M15 9.5V20"/></symbol>
-<symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
 <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 3.5v11.5M7.5 10.5L12 15l4.5-4.5"/><path d="M4.5 17.5v1.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-1.5"/></symbol>
 <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18 14.5V19a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19V8a1.5 1.5 0 0 1 1.5-1.5H10"/></symbol>
 <symbol id="i-link" viewBox="0 0 24 24"><path d="M10.2 13.8a3.6 3.6 0 0 0 5.1 0l3-3a3.6 3.6 0 0 0-5.1-5.1l-1.4 1.4"/><path d="M13.8 10.2a3.6 3.6 0 0 0-5.1 0l-3 3a3.6 3.6 0 0 0 5.1 5.1l1.4-1.4"/></symbol>
@@ -111,7 +138,7 @@ export const BASE_CSS = `
 :root{
   --bg:#000;--surface:#1a1a19;--surface-2:#232321;--line:#2c2c2a;--line-strong:#383835;
   --ink:#fff;--ink-2:#c3c2b7;--muted:#898781;--faint:#5e5d59;
-  --s1:#3987e5;--good:#0ca30c;--critical:#d03b3b;
+  --s1:#3987e5;--good:#0ca30c;--warn:#fab219;--critical:#d03b3b;
   --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
   --sans:system-ui,-apple-system,"Segoe UI",Inter,Roboto,sans-serif;
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
@@ -125,6 +152,10 @@ h1{font-family:var(--serif);font-weight:400;font-size:34px;line-height:1.15;lett
 .chip{display:inline-flex;align-items:center;gap:7px;padding:4px 12px;border-radius:999px;
   background:#262624;color:#fff;white-space:nowrap;line-height:1.4;font-size:13.5px}
 .chip svg{width:13px;height:13px;flex:none;stroke:#fff;fill:none;stroke-width:1.6}
+/* The expiry pill's tone: the only coloured text in a byline. */
+.chip.warn{color:var(--warn)} .chip.critical{color:var(--critical)}
+/* File-type glyphs carry their own colours and strokes, so no inherited stroke or fill. */
+.ftype{width:20px;height:20px;flex:none;color:#fff}
 .icon{width:20px;height:20px;flex:none;stroke:#fff;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 /* Every glyph on these two pages is white: sizes, types, pill contents, captions,
    queue metadata, the sent list. Hierarchy comes from size and weight, never from
@@ -151,13 +182,22 @@ h1{font-family:var(--serif);font-weight:400;font-size:34px;line-height:1.15;lett
 @media (max-width:420px){h1{font-size:28px}body{font-size:16px}main{padding:32px 0 64px}}
 `;
 
-/** The serif title plus the byline pills both pages open with. */
-export function header(title: string, chips: { icon?: string; text: string }[]): string {
+/**
+ * The serif title plus the byline pills both pages open with. A pill with
+ * `expires` (epoch ms) is the expiry pill: it carries `data-expires` and its
+ * tone, and `EXPIRY_SCRIPT` keeps it current.
+ */
+export function header(
+  title: string,
+  chips: { icon?: string; text: string; tone?: string; expires?: number }[],
+): string {
   const pills = chips
-    .map(
-      (c) =>
-        `<span class="chip">${c.icon ? `<svg viewBox="0 0 16 16"><use href="#i-${c.icon}"/></svg>` : ""}${esc(c.text)}</span>`,
-    )
+    .map((c) => {
+      const cls = c.tone ? `chip ${c.tone}` : "chip";
+      const data = c.expires === undefined ? "" : ` data-expires="${c.expires}"`;
+      const glyph = c.icon ? `<svg viewBox="0 0 16 16"><use href="#i-${c.icon}"/></svg>` : "";
+      return `<span class="${cls}"${data}>${glyph}<span>${esc(c.text)}</span></span>`;
+    })
     .join("");
   return `<h1>${esc(title)}</h1><div class="byline">${pills}</div>`;
 }

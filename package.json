@@ -1,6 +1,6 @@
 {
   "name": "postplan-aryan",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Publish a self-contained HTML document and get a link. Convex + S3 backend. Fork of postplan (MIT, t3dotgg).",
   "type": "module",
   "license": "MIT",
@@ -34,6 +34,9 @@
   },
   "homepage": "https://github.com/Aryan-Saini/postplan-convex",
   "devDependencies": {
-    "convex": "^1.43.0"
+    "convex": "^1.43.0",
+    "lucide-static": "^1.47.0",
+    "material-icon-theme": "^5.38.1",
+    "simple-icons": "^16.32.0"
   }
 }

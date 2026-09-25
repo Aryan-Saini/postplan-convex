@@ -597,7 +597,7 @@ const ANGLES = "M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5";
 const cMark = (fill, extra = "") =>
   `<path d="${HEXAGON}" fill="${fill}"/>${S(extra ? "M7.6 5.9a2.6 2.6 0 1 0 0 4.2" : "M10.3 6a2.8 2.8 0 1 0 0 4", "#fff", 1.5)}${extra}`;
 
-const ICONS = {
+export const ICONS = {
   ts: `<rect x="1.5" y="1.5" width="13" height="13" rx="2" fill="#3178c6"/>${S("M3.6 8h4.2M5.7 8v5", "#fff", 1.3)}${S(LETTER_S, "#fff", 1.2)}`,
   js: `<rect x="1.5" y="1.5" width="13" height="13" rx="2" fill="#f7df1e"/>${S("M7.3 8v3.6c0 .9-.5 1.4-1.3 1.4-.6 0-1-.3-1.2-.7", "#000", 1.3)}${S(LETTER_S, "#000", 1.2)}`,
   py: `<path fill="#3572a5" d="M7.9 1.5c-2.7 0-2.6 1.2-2.6 1.2v1.6h2.7v.5H4.2S2 4.5 2 7.9c0 3.4 1.9 3.3 1.9 3.3h1.2V9.6s-.1-1.9 1.9-1.9h2.8s1.8 0 1.8-1.8V3.3S11.8 1.5 7.9 1.5zM6.4 2.4a.55.55 0 1 1 0 1.1.55.55 0 0 1 0-1.1z"/>` +
@@ -650,6 +650,7 @@ const ICONS = {
   // The media failure panel: a framed landscape and a camera, each struck through, and the Open pill's arrow.
   "image-off": S("M13.5 10.5V3.5a1 1 0 0 0-1-1H5.5M2.5 4.5v8a1 1 0 0 0 1 1h8M2.5 10.5l3-3 3 3M9.5 8.5l1-1 3 3M1.5 1.5l13 13", "currentColor", 1.3),
   "video-off": S("M8 4.5h1.5a1 1 0 0 1 1 1V8M10.5 11v.5a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h1M10.5 7.5l4-2.5v6.5l-2.5-1.5M1.5 1.5l13 13", "currentColor", 1.3),
+  download: S("M8 2v8.5M4.5 7 8 10.5 11.5 7M2.5 12.5v1a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-1", "currentColor", 1.3),
   open: S("M9.5 2.5h4v4M13.5 2.5 7.5 8.5M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3", "currentColor", 1.3),
   // Slideshow arrows: monoline chevrons.
   "chevron-left": S("M10 3 5 8l5 5", "currentColor", 1.5),
@@ -664,7 +665,7 @@ export function iconKey(lang) {
 }
 
 /** Sprite entries that are interface glyphs, never a language's icon. */
-const UI_ICONS = words("copy file image-off video-off open chevron-left chevron-right");
+const UI_ICONS = words("copy file image-off video-off open download chevron-left chevron-right");
 
 const useIcon = (key, cls) =>
   `<svg class="${cls}" viewBox="0 0 16 16" aria-hidden="true"><use href="#icon-${key}"/></svg>`;
@@ -675,13 +676,14 @@ const useIcon = (key, cls) =>
  *
  * @param {Iterable<string>} keys icon keys from `iconKey`, plus `copy` and
  *   `file` when a Copy button or a path is on the page, `image-off`,
- *   `video-off` and `open` for media failure panels, and `chevron-left` and
- *   `chevron-right` for slideshow arrows
+ *   `video-off` and `open` for media failure panels, `chevron-left` and
+ *   `chevron-right` for slideshow arrows, and `download` for file cards
+ * @param {string} [extra] ready-made `<symbol>`s to add, such as file-type glyphs
  */
-export function codeSprite(keys) {
+export function codeSprite(keys, extra = "") {
   const symbols = [...new Set(keys)].filter((k) => k in ICONS)
     .map((k) => `<symbol id="icon-${k}" viewBox="0 0 16 16">${ICONS[/** @type {keyof typeof ICONS} */ (k)]}</symbol>`);
-  return `<svg class="sprite" aria-hidden="true" focusable="false">${symbols.join("")}</svg>`;
+  return `<svg class="sprite" aria-hidden="true" focusable="false">${symbols.join("")}${extra}</svg>`;
 }
 
 /**

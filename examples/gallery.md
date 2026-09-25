@@ -1,7 +1,7 @@
 ---
 title: Postplan component gallery
 byline: Aryan Saini
-date: Sep 22, 2026
+date: Sep 24, 2026
 status: Draft v3
 ---
 
@@ -414,6 +414,29 @@ Without a `zoom` title there is no lightbox to disable; the panel takes the imag
 | Unsupported video | This video format isn't supported here. | Use mp4 with H.264 video |
 | One bad slide | Couldn't load this image. | Re-upload that slide with file-upload |
 | Plain image, no zoom | Couldn't load this image. | Re-upload with file-upload |
+
+## Files
+
+Anything the reader should download goes in a `file` fence: the type's icon, the name in mono, the size and kind, and
+Download, Open and Copy link on the right. `expires` puts a pill on the meta line: a date when the link has more than
+two days left, a countdown under 48 hours that turns amber under 6 hours and red under 1, and once it passes, a line
+saying the link expired in place of Download and Open. A signed S3 URL carries its own expiry, so it needs no `expires`.
+
+```file
+{"src":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/syncafy-1.4.2-k2n8v5qd.apk","name":"syncafy-1.4.2.apk","size":48213333,
+ "note":"Release build for the Pixel test group. Allow installs from unknown sources first."}
+```
+
+A list renders as rows on one surface.
+
+```file
+[{"src":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/syncafy-1.4.2-p7w3c9xa.ipa","name":"Syncafy-1.4.2.ipa","size":61874210},
+ {"src":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/field-photos-sep-m4t8r2ye.zip","name":"field-photos-sep.zip","size":312448120,"expires":"2026-09-25T19:00:00Z",
+  "note":"Every site photo from September, 1,214 files."},
+ {"src":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/q3-invoice-summary-h6d2k9sb.pdf","name":"q3-invoice-summary.pdf","size":284311,"expires":"2026-09-01"},
+ {"src":"https://aryan-personal-files.s3.us-east-1.amazonaws.com/public/postplan/routes-export-w9q4n7jz.csv?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAEXAMPLE%2F20260924%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260924T180000Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=0000000000000000000000000000000000000000000000000000000000000000",
+  "name":"routes-export.csv","size":1840022}]
+```
 
 ## Diagrams
 

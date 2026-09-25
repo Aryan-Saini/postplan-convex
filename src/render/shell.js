@@ -213,6 +213,23 @@ img::before{content:"";position:absolute;inset:0;background:var(--surface);borde
 img::after{content:attr(alt);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
   padding:12px 16px;font:14px/1.45 var(--sans);color:var(--ink);text-align:center}
 
+/* ---- file cards: one surface, a row per file, a hairline between ---- */
+.files{margin:0 0 20px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+.file{display:flex;align-items:center;gap:14px;padding:14px 16px}
+.file + .file{border-top:1px solid var(--line)}
+.ft-icon{width:24px;height:24px;flex:none;color:var(--ink)}
+.fc-main{flex:1 1 auto;min-width:0}
+.fc-name{font:14.5px/1.4 var(--mono);overflow-wrap:anywhere}
+.fc-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin-top:3px;font-size:13px;line-height:1.4;
+  font-variant-numeric:tabular-nums}
+.fc-pill{display:inline-flex;align-items:center;padding:1px 9px;border-radius:999px;background:#262624;white-space:nowrap}
+.fc-pill.warn{color:var(--warn)} .fc-pill.critical{color:var(--critical)}
+.fc-note,.fc-gone{font-size:14px;line-height:1.45;margin-top:6px}
+.fc-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;flex:none}
+a.copy{text-decoration:none}
+.copy.primary{background:#fff;border-color:#fff;color:#000}
+.copy.primary:hover{background:#e6e6e3;border-color:#e6e6e3}
+
 /* ---- slideshow: scroll-snap, dots are anchors; the arrows exist only with script ---- */
 .slides{margin:0 0 8px}
 .slides .stage{position:relative}
@@ -426,6 +443,11 @@ ol.footnotes a.fn-back:hover{color:var(--ink)}
   .code-title{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .code-range{flex:none}
   .code-name + .code-tools .code-lang{font-size:0;gap:0}
+  /* A file's actions drop under its name, lined up with the text. */
+  .file{flex-wrap:wrap;align-items:flex-start;gap:10px 12px;padding:14px}
+  .ft-icon{margin-top:1px}
+  .fc-main{flex-basis:calc(100% - 36px)}
+  .fc-actions{flex-basis:100%;justify-content:flex-start;padding-left:36px}
 }
 @media print{
   body{background:#fff;color:#000}

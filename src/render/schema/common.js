@@ -237,6 +237,20 @@ export function wantIsoDate(ctx, v, pointer) {
   return true;
 }
 
+/**
+ * An ISO 8601 instant: a date (`2026-09-26`, midnight UTC) or a date and time
+ * with a zone (`2026-09-26T21:00:00Z`, `…T14:00-07:00`). A time without a
+ * zone is refused, since it would mean a different moment for every reader.
+ */
+export function wantIsoInstant(ctx, v, pointer) {
+  const bad = () => ctx.at(pointer, `expected an ISO 8601 time like 2026-09-26T21:00:00Z, got ${show(v)}`);
+  if (typeof v !== "string") return bad();
+  const m = /^(\d{4}-\d{2}-\d{2})(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2}))?$/.exec(v);
+  if (!m || Number.isNaN(Date.parse(v))) return bad();
+  if (new Date(Date.parse(`${m[1]}T00:00:00Z`)).toISOString().slice(0, 10) !== m[1]) return bad();
+  return true;
+}
+
 /** Milliseconds for an already-validated ISO date. */
 export function isoMs(v) {
   return Date.parse(`${v}T00:00:00Z`);
@@ -252,7 +266,7 @@ const PUBLISHABLE_SRC = /^(https:\/\/|data:)/i;
  * The diagnostic for a media src that will not draw, or null when it will.
  * Shared by the fence validators and the prose scan so both read the same.
  *
- * @param {"image" | "video"} kind
+ * @param {"image" | "video" | "file"} kind
  * @param {string} src
  */
 export function srcError(kind, src) {
@@ -260,8 +274,8 @@ export function srcError(kind, src) {
   return `${kind} src ${JSON.stringify(src)} must be https: or data: (publish it with file-upload first)`;
 }
 
-/** An https: or data: URL for an image, poster or clip. */
-export function wantUrl(ctx, v, pointer, kind = /** @type {"image" | "video"} */ ("image")) {
+/** An https: or data: URL for an image, poster, clip or download. */
+export function wantUrl(ctx, v, pointer, kind = /** @type {"image" | "video" | "file"} */ ("image")) {
   if (!wantText(ctx, v, pointer, "a URL")) return false;
   const message = srcError(kind, v);
   return message ? ctx.at("", message) : true;

@@ -284,7 +284,7 @@ test("examples/gallery.md parses clean", () => {
   assert.deepEqual(doc.meta, {
     title: "Postplan component gallery",
     byline: "Aryan Saini",
-    date: "Sep 22, 2026",
+    date: "Sep 24, 2026",
     status: "Draft v3",
   });
   assert.equal(doc.blocks[0].lead, true);
@@ -309,6 +309,7 @@ test("examples/gallery.md block sequence is stable", () => {
     "heading", "markdown", "html", "heading", "markdown", "slides", "heading", "markdown", "video",
     "heading", "markdown", "heading", "markdown", "heading", "markdown", "heading", "video",
     "heading", "slides", "heading", "markdown",
+    "heading", "markdown", "file", "markdown", "file",
     "heading", "markdown", "flow", "sequence",
     "heading", "markdown", "math", "math",
     "heading", "timeline",
@@ -321,7 +322,7 @@ test("examples/gallery.md uses every block kind", () => {
   const { doc } = parseMarkdown(readFileSync(GALLERY, "utf8"), { file: "examples/gallery.md" });
   const kinds = new Set(doc.blocks.map((b) => b.type));
   for (const t of ["markdown", "heading", "callout", "container", "chart", "stats", "hero", "code",
-    "diff", "flow", "sequence", "math", "timeline", "slides", "video", "html", "footnotes"]) {
+    "diff", "flow", "sequence", "math", "timeline", "slides", "video", "file", "html", "footnotes"]) {
     assert.ok(kinds.has(t), `gallery.md is missing a ${t} block`);
   }
 });

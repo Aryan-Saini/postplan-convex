@@ -19,7 +19,7 @@ import { CHART_KINDS, validateChart } from "./chart.js";
 import { validateTiles } from "./tiles.js";
 import { validateFlow, validateSequence, NODE_SHAPES } from "./diagram.js";
 import {
-  validateTimeline, validateSlides, validateVideo, validateInlineMedia, TIMELINE_STATES,
+  validateTimeline, validateSlides, validateVideo, validateFile, validateInlineMedia, TIMELINE_STATES,
 } from "./media.js";
 import { validateHtmlBlock } from "./html.js";
 import { FAVICONS } from "../shell.js";
@@ -40,6 +40,7 @@ const VALIDATORS = {
   timeline: validateTimeline,
   slides: validateSlides,
   video: validateVideo,
+  file: validateFile,
   html: validateHtmlBlock,
 };
 
@@ -205,6 +206,12 @@ function normalizeBlock(block) {
     case "video":
       if (!block.data || typeof block.data !== "object") return block;
       return { ...block, data: withDefaults(block.data, { poster: "", caption: "" }) };
+
+    // One file or a list renders the same way, so the renderer only ever sees a list.
+    case "file": {
+      const items = Array.isArray(block.data) ? block.data : block.data ? [block.data] : [];
+      return { ...block, data: items.map((f) => withDefaults(f, { kind: "", expires: "", note: "" })) };
+    }
 
     case "flow": {
       if (!block.data || typeof block.data !== "object") return block;

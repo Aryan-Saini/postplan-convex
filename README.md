@@ -60,6 +60,13 @@ draft under `plan.md`, so re-uploading the source keeps the same URL.
 and `render` accepts that JSON back in place of the Markdown. A document that
 does not validate prints one diagnostic per line and writes nothing.
 
+A `file` fence renders download cards: `{"src":"https://…","name":"app.apk","size":48213333,"expires":"2026-09-26T21:00:00Z"}`,
+or an array of them for a list. Each card shows the type's icon and label (inferred from the extension, or set with
+`kind`), the size, and Download, Open and Copy link. When `expires` is set, or the src is a signed S3 URL, a pill shows
+the date, then a countdown inside 48 hours, and once it passes the card says the link expired instead of offering a
+dead Download. The icons come from material-icon-theme (MIT), Lucide (ISC) and simple-icons (CC0), copied in by
+`scripts/file-icons.mjs`; the /s/ send page uses the same set.
+
 The full grammar — every block kind, its JSON shape, and the error messages —
 lives in the `html-communication` skill's `SKILL.md`. `examples/gallery.md`
 renders one of everything and is the fixture the tests check.

@@ -10,7 +10,8 @@
  * inside the `<p>` a markdown image sits in.
  *
  * `linkState` and `failureText` are pure and exported for tests; the script
- * embeds their source, so the browser runs the same code the tests do.
+ * embeds their source (and `signedExpiry`'s, the presign parser linkState
+ * shares with file cards), so the browser runs the same code the tests do.
  *
  * With scripts blocked the panel never shows; the `img::before/::after` rules in
  * `shell.js` draw a failed image's alt text in a hairline box instead.
@@ -19,6 +20,7 @@
  */
 
 import { unescapeHtml } from "./math.js";
+import { signedExpiry } from "./filetypes.js";
 
 /** @typedef {"image" | "video"} MediaKind */
 /** @typedef {"expired" | "signed" | "plain" | "data"} LinkState */
@@ -35,20 +37,10 @@ import { unescapeHtml } from "./math.js";
  */
 export function linkState(src, now = Date.now()) {
   if (/^data:/i.test(src)) return "data";
-  let params;
-  try {
-    params = new URL(src, "https://base.invalid/").searchParams;
-  } catch {
-    return "plain";
-  }
-  const date = params.get("X-Amz-Date");
-  const expires = params.get("X-Amz-Expires");
-  if (date === null && expires === null) return "plain";
-  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(date || "");
-  if (!m || !/^\d+$/.test(expires || "")) return "signed";
-  const seconds = Number(expires);
-  const signedAt = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
-  return now > signedAt + seconds * 1000 ? "expired" : "signed";
+  const expires = signedExpiry(src);
+  if (expires === undefined) return "plain";
+  if (Number.isNaN(expires)) return "signed";
+  return now > expires ? "expired" : "signed";
 }
 
 /**
@@ -129,6 +121,7 @@ export function withFailPanels(html, ctx) {
  * reset and retry when the network comes back.
  */
 export const MEDIA_SCRIPT = `(() => {
+  const signedExpiry = ${signedExpiry};
   const linkState = ${linkState};
   const failureText = ${failureText};
   const hostOf = (el) => el.closest("a") || el;

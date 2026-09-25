@@ -20,6 +20,8 @@ import { COPY_SCRIPT, codeSprite, iconKey, pathButton, renderCode, renderDiff } 
 import { renderFlow, renderSequence } from "./diagram.js";
 import { renderInlineMath, renderMathBlock, unescapeHtml } from "./math.js";
 import { MEDIA_SCRIPT, withFailPanels } from "./media.js";
+import { FILES_SCRIPT, renderFiles } from "./files.js";
+import { fileSymbol } from "./filetypes.js";
 
 /** @typedef {import("./ir.js").Block} Block */
 /** @typedef {import("./ir.js").Doc} Doc */
@@ -28,12 +30,16 @@ import { MEDIA_SCRIPT, withFailPanels } from "./media.js";
 /** Per-document render state: lightbox ids are document-wide, a `sources`
  * heading changes how the list under it is styled, `chips` records that a
  * file chip needs the copy script and the file glyph, and `media` that a
- * failure panel needs the media script and its icons, and `slides` that a
- * slideshow needs the slides script and the chevrons.
- * @typedef {{ lightboxes: string[], zoomCount: number, heading: string, chips: boolean, media: boolean, slides: boolean }} Ctx */
+ * failure panel needs the media script and its icons, `slides` that a
+ * slideshow needs the slides script and the chevrons, and `files` that a file
+ * card needs the files script, with `fileIcons` the type glyphs its cards draw.
+ * @typedef {{ lightboxes: string[], zoomCount: number, heading: string, chips: boolean, media: boolean,
+ *   slides: boolean, files: boolean, fileIcons: Set<string> }} Ctx */
 
 /** @returns {Ctx} */
-const newCtx = () => ({ lightboxes: [], zoomCount: 0, heading: "", chips: false, media: false, slides: false });
+const newCtx = () => ({
+  lightboxes: [], zoomCount: 0, heading: "", chips: false, media: false, slides: false, files: false, fileIcons: new Set(),
+});
 
 /* ------------------------------------------------------------------ document */
 
@@ -41,11 +47,12 @@ const newCtx = () => ({ lightboxes: [], zoomCount: 0, heading: "", chips: false,
  * Render a whole document body: title, byline, contents strip, then every block
  * in order, with any lightbox overlays collected at the end.
  *
- * A document with code blocks, file chips or media also gets, once each, the
- * icon sprite they reference (top of the body) and the document script (end
- * of the body): the copy script, plus the media script when there are failure
- * panels and the slides script when there is a slideshow. A document with none
- * of them stays script-free.
+ * A document with code blocks, file chips, media or file cards also gets, once
+ * each, the icon sprite they reference (top of the body) and the document
+ * script (end of the body): the copy script, plus the media script when there
+ * are failure panels, the slides script when there is a slideshow and the files
+ * script when there are file cards. A document with none of them stays
+ * script-free. The sprite carries only the glyphs the document uses.
  *
  * @param {Doc} doc
  * @returns {string}
@@ -71,14 +78,19 @@ export function renderBody(doc) {
 
   const wrap = `<div class="wrap"><main>\n${parts.filter(Boolean).join("\n")}\n</main></div>`;
   const code = blocks.filter((b) => b.type === "code" || b.type === "diff");
-  if (!code.length && !ctx.chips && !ctx.media && !ctx.slides) return wrap;
+  if (!code.length && !ctx.chips && !ctx.media && !ctx.slides && !ctx.files) return wrap;
   const icons = code.map((b) => (b.type === "diff" ? "diff" : iconKey(b.lang)));
-  if (code.length || ctx.media) icons.push("copy");
+  if (code.length || ctx.media || ctx.files) icons.push("copy");
   if (ctx.chips || code.some((b) => b.file)) icons.push("file");
   if (ctx.media) icons.push("image-off", "video-off", "open");
   if (ctx.slides) icons.push("chevron-left", "chevron-right");
-  const script = [COPY_SCRIPT, ctx.media && MEDIA_SCRIPT, ctx.slides && SLIDES_SCRIPT].filter(Boolean).join("\n");
-  return `${codeSprite(icons)}\n${wrap}\n<script>${script}</script>`;
+  if (ctx.files) icons.push("download", "open");
+  // A type glyph may be a language icon a code block already put in the sprite.
+  const have = new Set(icons);
+  const glyphs = [...ctx.fileIcons].filter((k) => !have.has(k)).map((k) => fileSymbol(k, `icon-${k}`)).join("");
+  const script = [COPY_SCRIPT, ctx.media && MEDIA_SCRIPT, ctx.slides && SLIDES_SCRIPT, ctx.files && FILES_SCRIPT]
+    .filter(Boolean).join("\n");
+  return `${codeSprite(icons, glyphs)}\n${wrap}\n<script>${script}</script>`;
 }
 
 /**
@@ -158,6 +170,7 @@ export function renderBlock(block, ctx = newCtx()) {
     case "timeline": return timeline(block);
     case "slides": return withFailPanels(slides(block, ctx), ctx);
     case "video": return withFailPanels(video(block), ctx);
+    case "file": return renderFiles(block, ctx);
     case "code": return renderCode(block);
     case "diff": return renderDiff(block);
     case "flow": return renderFlow(block);

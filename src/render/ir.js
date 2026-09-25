@@ -56,6 +56,8 @@
 /** @typedef {BlockBase & { type: "timeline", info: string, data: unknown }} TimelineBlock */
 /** @typedef {BlockBase & { type: "slides", info: string, data: unknown }} SlidesBlock */
 /** @typedef {BlockBase & { type: "video", info: string, data: unknown }} VideoBlock */
+/** One download or a list of them; see `validateFile`.
+ * @typedef {BlockBase & { type: "file", info: string, data: unknown }} FileBlock */
 
 /** @typedef {BlockBase & { type: "code", lang: string, info: string, source: string, file?: string, title?: string, range?: string, lines?: true }} CodeBlock */
 
@@ -75,7 +77,7 @@
 /**
  * @typedef {MarkdownBlock | HeadingBlock | CalloutBlock | ContainerBlock | ChartBlock
  *   | StatsBlock | HeroBlock | FlowBlock | SequenceBlock | TimelineBlock | SlidesBlock
- *   | VideoBlock | CodeBlock | DiffBlock | MathBlock | HtmlBlock | FootnotesBlock} Block
+ *   | VideoBlock | FileBlock | CodeBlock | DiffBlock | MathBlock | HtmlBlock | FootnotesBlock} Block
  */
 
 /** @typedef {{ version: 1, meta: Meta, blocks: Block[] }} Doc */
@@ -86,12 +88,12 @@
 export const BLOCK_TYPES = /** @type {const} */ ([
   "markdown", "heading", "callout", "container", "chart", "stats", "hero",
   "code", "diff", "flow", "sequence", "math", "timeline", "slides", "video",
-  "html", "footnotes",
+  "file", "html", "footnotes",
 ]);
 
 /** Fence kinds that carry a JSON body rather than source text. */
 export const DATA_FENCES = /** @type {const} */ ([
-  "chart", "stats", "hero", "flow", "sequence", "timeline", "slides", "video",
+  "chart", "stats", "hero", "flow", "sequence", "timeline", "slides", "video", "file",
 ]);
 
 /** Callout tones, plus the GitHub alert names that map onto them. */

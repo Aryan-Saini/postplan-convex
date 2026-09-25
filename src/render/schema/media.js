@@ -1,5 +1,5 @@
 /**
- * `timeline`, `slides` and `video` fences, plus the src check for images in
+ * `timeline`, `slides`, `video` and `file` fences, plus the src check for images in
  * prose and `html` fences.
  *
  * @module render/schema/media
@@ -7,9 +7,12 @@
 
 import {
   Ctx, ptr, wantObject, wantNonEmptyArray, wantText, optionalString,
-  optionalEnum, wantUrl, unknownKeys, srcError,
+  optionalEnum, wantUrl, unknownKeys, srcError, wantNumber, wantIsoInstant, show,
 } from "./common.js";
 import { unescapeHtml } from "../math.js";
+import { FILE_KINDS } from "../filetypes.js";
+
+const KIND_SET = new Set(FILE_KINDS);
 
 /** Where an entry sits relative to now; drives the marker's fill. */
 export const TIMELINE_STATES = /** @type {const} */ (["done", "now", "next"]);
@@ -57,6 +60,36 @@ export function validateVideo(errors, block, file) {
   if (body.poster !== undefined) wantUrl(ctx, body.poster, "/poster");
   optionalString(ctx, body.caption, "/caption");
   unknownKeys(ctx, body, "", ["src", "poster", "caption"]);
+}
+
+const FILE_KEYS = ["src", "name", "size", "kind", "expires", "note"];
+
+/**
+ * `{ src, name, size, kind?, expires?, note? }`, or a non-empty array of them
+ * for a list. `size` is bytes; `kind` is an extension (`"apk"`) for a name that
+ * does not end in one; `expires` is when the link stops working.
+ */
+export function validateFile(errors, block, file) {
+  const ctx = new Ctx(errors, file, block.line, "file");
+  const list = Array.isArray(block.data);
+  if (list && !wantNonEmptyArray(ctx, block.data, "", "at least one file")) return;
+  const items = list ? /** @type {unknown[]} */ (block.data) : [block.data];
+
+  items.forEach((item, i) => {
+    const at = list ? ptr("", i) : "";
+    if (!wantObject(ctx, item, at, "a file { src, name, size }")) return;
+    wantUrl(ctx, item.src, ptr(at, "src"), "file");
+    wantText(ctx, item.name, ptr(at, "name"), "a file name");
+    if (wantNumber(ctx, item.size, ptr(at, "size")) && /** @type {number} */ (item.size) < 0) {
+      ctx.at(ptr(at, "size"), `expected a size in bytes, got ${show(item.size)}`);
+    }
+    if (item.kind !== undefined && !(typeof item.kind === "string" && KIND_SET.has(item.kind.toLowerCase()))) {
+      ctx.at(ptr(at, "kind"), `expected a file extension like apk, ipa, zip or pdf, got ${show(item.kind)}`);
+    }
+    if (item.expires !== undefined) wantIsoInstant(ctx, item.expires, ptr(at, "expires"));
+    optionalString(ctx, item.note, ptr(at, "note"));
+    unknownKeys(ctx, item, at, FILE_KEYS);
+  });
 }
 
 /**
