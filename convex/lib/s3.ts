@@ -47,6 +47,27 @@ export function s3Config(): S3Config {
 }
 
 /**
+ * The second bucket, for `postplan asset`: Aryan's personal files bucket, written
+ * under `public/` and `protected/` with the same access key pair. Unset means the
+ * deployment does not serve assets, and the error says how to turn it on.
+ */
+export function assetsConfig(): S3Config {
+  const bucket = process.env.ASSETS_BUCKET;
+  const region = process.env.ASSETS_REGION;
+  if (!bucket || !region) {
+    throw new Error(
+      "Assets are not configured on this server. Set ASSETS_BUCKET and ASSETS_REGION with `npx convex env set`.",
+    );
+  }
+  return { ...s3Config(), bucket, region, prefix: "" };
+}
+
+/** The permanent, unsigned URL of a public object. */
+export function objectUrl(config: S3Config, key: string): string {
+  return `https://${s3Host(config)}${encodePath("/" + key)}`;
+}
+
+/**
  * The virtual-hosted-style host every presigned URL points at. Exported so the
  * pages that fetch and PUT to it can name it in their `connect-src` without
  * hardcoding a bucket.
@@ -68,12 +89,17 @@ function encodePath(path: string): string {
 /**
  * A presigned URL for one object. `expiresIn` is capped at 7 days by AWS, which is
  * also this project's transfer lifetime.
+ *
+ * `headers` are signed along with `host`, so the request must send exactly
+ * those values: that is how a PUT carries `x-amz-tagging`, which S3 refuses
+ * unsigned on a presigned request.
  */
 export async function presign(
   config: S3Config,
-  method: "GET" | "PUT" | "DELETE",
+  method: "GET" | "HEAD" | "PUT" | "DELETE",
   key: string,
   expiresIn: number,
+  headers: Record<string, string> = {},
 ): Promise<string> {
   const host = s3Host(config);
   const now = new Date();
@@ -81,12 +107,18 @@ export async function presign(
   const dateStamp = amzDate.slice(0, 8);
   const scope = `${dateStamp}/${config.region}/s3/aws4_request`;
 
+  const signed = [
+    ["host", host],
+    ...Object.entries(headers).map(([k, value]) => [k.toLowerCase(), value.trim()]),
+  ].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  const signedHeaders = signed.map(([k]) => k).join(";");
+
   const query = new URLSearchParams({
     "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
     "X-Amz-Credential": `${config.accessKeyId}/${scope}`,
     "X-Amz-Date": amzDate,
     "X-Amz-Expires": String(Math.min(expiresIn, 604800)),
-    "X-Amz-SignedHeaders": "host",
+    "X-Amz-SignedHeaders": signedHeaders,
   });
   // S3 requires the canonical query string sorted by key.
   const canonicalQuery = [...query.entries()]
@@ -98,8 +130,8 @@ export async function presign(
     method,
     encodePath("/" + key),
     canonicalQuery,
-    `host:${host}\n`,
-    "host",
+    signed.map(([k, value]) => `${k}:${value}\n`).join(""),
+    signedHeaders,
     "UNSIGNED-PAYLOAD",
   ].join("\n");
 

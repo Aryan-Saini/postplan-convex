@@ -6,7 +6,12 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
+import {
+  inferProject, isBuild, isoInstant, objectName, parseAssetRef, planExpiry, randomId, slugify
+} from "../src/assets.js";
 import { parseDraftRef } from "../src/draft-ref.js";
+import { installPage, itmsLink, manifestPlist, readIpaInfo } from "../src/ios.js";
+import { fmtBytes } from "../src/render/filetypes.js";
 import { validateHtml } from "../src/html-policy.js";
 import { render } from "../src/render/index.js";
 import { formatError } from "../src/render/schema/index.js";
@@ -32,7 +37,9 @@ const CONTENT_TYPES = {
   pdf: "application/pdf", json: "application/json", zip: "application/zip",
   md: "text/markdown", txt: "text/plain", csv: "text/csv", log: "text/plain",
   html: "text/html", css: "text/css", js: "text/javascript", ts: "text/plain",
-  py: "text/x-python", sh: "text/x-shellscript", yml: "text/yaml", yaml: "text/yaml"
+  py: "text/x-python", sh: "text/x-shellscript", yml: "text/yaml", yaml: "text/yaml",
+  apk: "application/vnd.android.package-archive", dmg: "application/x-apple-diskimage",
+  plist: "text/xml", xml: "text/xml", msi: "application/x-msi"
 };
 
 function guessType(name) {
@@ -395,6 +402,189 @@ program
       }
       console.log(`Downloaded ${body.files.length} file(s) to ${dir}`);
   });
+
+/**
+ * `postplan asset <file...>`: publish files to the assets bucket. Public files
+ * get their permanent bucket URL; `--private` ones a stable `/a/<slug>` link that
+ * redirects to a short-lived signed URL. Builds expire in 7 days by default, and
+ * an `.ipa` also gets an iOS manifest and install page.
+ */
+const assetCommand = program
+  .command("asset")
+  .description("Publish files and print their URLs. Public by default.")
+  .argument("[files...]", "files to publish")
+  .option("--private", "Keep it private, reachable only through a stable /a/ link")
+  .option("--project <name>", "Folder to file it under (default: the git repo, else the current folder)")
+  .option("--expires <when>", "7d, 24h, never, or an ISO date (builds default to 7d)")
+  .option("--no-manifest", "For an .ipa, skip the iOS manifest and install page")
+  .option("--json", "Print {url, slug, visibility, expiresAt, key}")
+  .option("--api-url <url>", "Override the default API base URL")
+  .action(async (files, options) => {
+    if (!files.length) throw new CliError("Give at least one file: postplan asset <file> [<file>...]");
+    const visibility = options.private ? "private" : "public";
+    const project = options.project === undefined ? currentProject() : slugify(options.project);
+    if (!project) throw new CliError(`--project needs letters or digits, got ${JSON.stringify(options.project)}`);
+
+    // Everything that can fail locally fails before the first byte is sent.
+    const plans = files.map((f) => {
+      const file = path.resolve(f);
+      if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new CliError(`Not a file: ${file}`);
+      const base = path.basename(file);
+      let expiry;
+      try {
+        expiry = planExpiry({ name: base, expires: options.expires });
+      } catch (err) {
+        throw new CliError(err.message);
+      }
+      let ios = null;
+      if (options.manifest && base.toLowerCase().endsWith(".ipa")) {
+        try {
+          ios = readIpaInfo(file);
+        } catch (err) {
+          throw new CliError(`${err.message}\nPass --no-manifest to upload it without the install page.`);
+        }
+      }
+      return { file, base, suffix: randomId(), ...expiry, ios };
+    });
+
+    const auth = readAuth(options.apiUrl);
+    const results = [];
+    for (const plan of plans) {
+      const common = { project, visibility, expiresAt: plan.expiresAt, tags: plan.tags };
+      const asset = await putAsset(auth, {
+        ...common,
+        name: objectName(plan.base, plan.suffix),
+        contentType: guessType(plan.base),
+        body: fs.readFileSync(plan.file)
+      });
+      const result = { ...asset, file: plan.file };
+      if (plan.ios) {
+        // The manifest points at the ipa, and the page at the manifest, so they go up in that order.
+        const stem = plan.base.replace(/\.ipa$/i, "");
+        const manifest = await putAsset(auth, {
+          ...common,
+          name: objectName(`${stem}.plist`, plan.suffix),
+          contentType: "text/xml",
+          body: Buffer.from(manifestPlist({ url: asset.url, ...plan.ios }))
+        });
+        const link = itmsLink(manifest.url);
+        const page = await putAsset(auth, {
+          ...common,
+          name: objectName(`${stem}.html`, plan.suffix),
+          contentType: "text/html; charset=utf-8",
+          body: Buffer.from(installPage({ ...plan.ios, link }))
+        });
+        result.install = { link, manifest, page };
+      }
+      results.push(result);
+    }
+
+    if (options.json) {
+      const shaped = results.map(({ file: _file, ...rest }) => rest);
+      console.log(JSON.stringify(shaped.length === 1 ? shaped[0] : shaped, null, 2));
+      return;
+    }
+    results.forEach((result, i) => {
+      if (i) console.log("");
+      console.log(`Uploaded ${path.basename(result.file)} (${result.visibility})`);
+      console.log(`URL: ${result.url}`);
+      if (result.expiresAt) console.log(`Expires: ${isoInstant(result.expiresAt)}`);
+      if (result.install) {
+        console.log(`Install: ${result.install.link}`);
+        console.log(`Install page: ${result.install.page.url}`);
+      }
+    });
+  });
+
+assetCommand
+  .command("rm")
+  .description("Delete an asset: its object and its record.")
+  .argument("<ref>", "the asset's slug, /a/ link or bucket URL")
+  .option("--api-url <url>", "Override the default API base URL")
+  .action(async (ref, options) => {
+    const parsed = parseAssetRef(ref);
+    if (!parsed) throw new CliError(`Not an asset slug or URL: ${ref}`);
+    const { apiUrl, apiKey } = readAuth(options.apiUrl);
+    const body = await postJson(`${apiUrl}/api/assets/remove`, apiKey, parsed, "Could not delete that asset.");
+    console.log(`Deleted ${body.key}`);
+  });
+
+program
+  .command("assets")
+  .description("List your published assets, newest first.")
+  .option("--api-url <url>", "Override the default API base URL")
+  .option("--json", "Print the raw JSON response")
+  .action(async (options) => {
+    const { apiUrl, apiKey } = readAuth(options.apiUrl);
+    const response = await fetch(`${apiUrl}/api/assets`, { headers: { Authorization: `Bearer ${apiKey}` } });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new CliError(body.error || `Could not list assets (${response.status}).`);
+    const assets = body.assets || [];
+    if (options.json) {
+      console.log(JSON.stringify(assets, null, 2));
+      return;
+    }
+    if (!assets.length) {
+      console.log("No assets yet. Publish one with: postplan asset <file>");
+      return;
+    }
+    const now = Date.now();
+    const rows = [
+      ["PROJECT", "NAME", "VISIBILITY", "SIZE", "EXPIRES", "URL"],
+      ...assets.map((a) => [
+        a.project,
+        a.name,
+        a.visibility,
+        fmtBytes(a.size),
+        a.expiresAt ? (a.expiresAt < now ? "expired" : isoInstant(a.expiresAt)) : "never",
+        a.url
+      ])
+    ];
+    const widths = rows[0].map((_, i) => Math.max(...rows.map((row) => row[i].length)));
+    for (const row of rows) {
+      console.log(row.map((cell, i) => (i === row.length - 1 ? cell : cell.padEnd(widths[i]))).join("  "));
+    }
+  });
+
+/**
+ * One asset upload: presign, PUT straight to S3 with the signed headers, then
+ * record it. Resolves to the record response, `{ url, slug, visibility, expiresAt, key }`.
+ */
+async function putAsset({ apiUrl, apiKey }, { name, project, visibility, contentType, body, expiresAt, tags }) {
+  const slot = await postJson(
+    `${apiUrl}/api/assets/sign`,
+    apiKey,
+    { name, project, contentType, size: body.length, visibility, expires: expiresAt, tags },
+    `Could not prepare ${name}.`
+  );
+  const put = await fetch(slot.url, {
+    method: "PUT",
+    headers: { "Content-Type": contentType, ...slot.headers },
+    body
+  });
+  if (!put.ok) throw new CliError(`Upload failed for ${name} (${put.status}).`);
+  return postJson(`${apiUrl}/api/assets/record`, apiKey, { key: slot.key, expires: expiresAt }, `Could not record ${name}.`);
+}
+
+/** POST JSON with the API key; the parsed body, or a CliError carrying the server's message. */
+async function postJson(url, apiKey, payload, failure) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(payload)
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new CliError(body.error || `${failure} (${response.status})`);
+  return body;
+}
+
+/** The project for an asset uploaded from here: git repo, else folder, else `random`. */
+function currentProject() {
+  const cwd = process.cwd();
+  const remoteName = parseRemote(git(["config", "--get", "remote.origin.url"], cwd)).name;
+  const root = git(["rev-parse", "--show-toplevel"], cwd);
+  return inferProject({ repoName: remoteName || (root ? path.basename(root) : null), cwd, home: os.homedir() });
+}
 
 program
   .command("list")

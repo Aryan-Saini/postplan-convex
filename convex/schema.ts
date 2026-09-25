@@ -34,6 +34,25 @@ export default defineSchema({
     uploadedAt: v.number(),
   }).index("by_slug", ["slug"]),
 
+  // A file published with `postplan asset`, in the assets bucket (not the drafts
+  // bucket). Public ones are served straight from the bucket; private ones only
+  // through `/a/<slug>`, where the slug is the credential.
+  assets: defineTable({
+    slug: v.string(),
+    key: v.string(),
+    bucket: v.string(),
+    visibility: v.union(v.literal("public"), v.literal("private")),
+    project: v.string(),
+    name: v.string(),
+    size: v.number(),
+    contentType: v.string(),
+    expiresAt: v.optional(v.number()),
+    createdBy: v.string(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_key", ["key"])
+    .index("by_createdBy", ["createdBy"]),
+
   versions: defineTable({
     draftId: v.string(),
     versionNumber: v.number(),

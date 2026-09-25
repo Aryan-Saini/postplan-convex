@@ -1,8 +1,10 @@
 import { httpRouter } from "convex/server";
 import { httpAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import { validateHtml } from "../src/html-policy.js";
-import { draftKey, presign, s3Config, s3Host } from "./lib/s3";
+import { assetSlug, parseAssetKey, taggingHeader, validateSignRequest } from "../src/assets.js";
+import { assetsConfig, draftKey, objectUrl, presign, s3Config, s3Host, type S3Config } from "./lib/s3";
 import { uploadPage } from "./lib/uploadPage";
 import { downloadPage } from "./lib/downloadPage";
 
@@ -276,6 +278,200 @@ http.route({
     }
     await ctx.runMutation(internal.uploads.addFile, { slug, key, name, size, contentType });
     return json({ ok: true });
+  }),
+});
+
+/**
+ * Assets: `postplan asset` publishes a file to the assets bucket. The CLI asks
+ * for a presigned PUT, sends the bytes straight to S3, then records the upload.
+ * The server builds the key itself (`public/` or `protected/` + project + name),
+ * so a client can never write outside those two prefixes.
+ */
+
+/** The assets bucket, or the 503 that says it is not configured. */
+function assetsOr503(): S3Config | Response {
+  try {
+    return assetsConfig();
+  } catch (err) {
+    return json({ error: err instanceof Error ? err.message : String(err) }, 503);
+  }
+}
+
+/** Where an asset is reached: its bucket URL when public, `/a/<slug>` when private. */
+function assetUrl(
+  config: S3Config,
+  row: Pick<Doc<"assets">, "visibility" | "bucket" | "key" | "slug">,
+  request: Request,
+): string {
+  return row.visibility === "public"
+    ? objectUrl({ ...config, bucket: row.bucket }, row.key)
+    : `${baseUrl(request)}/a/${row.slug}`;
+}
+
+const readJson = async (request: Request): Promise<unknown> => request.json().catch(() => null);
+
+http.route({
+  path: "/api/assets/sign",
+  method: "POST",
+  handler: httpAction(async (_ctx, request) => {
+    const auth = authorize(request);
+    if (!auth.ok) return json({ error: "Unauthorized." }, 401);
+    const config = assetsOr503();
+    if (config instanceof Response) return config;
+    const parsed = validateSignRequest(await readJson(request));
+    if (!parsed.ok) return json({ error: parsed.error }, 400);
+    const tagging = taggingHeader(parsed.value.tags);
+    // The client must send these headers verbatim: they are part of the signature.
+    const headers: Record<string, string> = tagging ? { "x-amz-tagging": tagging } : {};
+    const url = await presign(config, "PUT", parsed.value.key, 3600, headers);
+    return json({ key: parsed.value.key, url, headers });
+  }),
+});
+
+http.route({
+  path: "/api/assets/record",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const auth = authorize(request);
+    if (!auth.ok) return json({ error: "Unauthorized." }, 401);
+    const config = assetsOr503();
+    if (config instanceof Response) return config;
+    const { key, expires } = ((await readJson(request)) ?? {}) as Record<string, unknown>;
+    const parsed = typeof key === "string" ? parseAssetKey(key) : null;
+    if (!parsed || typeof key !== "string") return json({ error: "key is not an asset key." }, 400);
+    if (expires !== undefined && expires !== null && (typeof expires !== "number" || expires <= Date.now())) {
+      return json({ error: "expires must be a future epoch-ms time." }, 400);
+    }
+    // Size and type come from S3, not the client, and a PUT that never landed
+    // leaves no row behind.
+    const head = await fetch(await presign(config, "HEAD", key, 60), { method: "HEAD" });
+    if (!head.ok) return json({ error: `Storage has no object at ${key} (${head.status}).` }, 400);
+
+    const slug = assetSlug(parsed.name);
+    const row = {
+      slug,
+      key,
+      bucket: config.bucket,
+      visibility: parsed.visibility,
+      project: parsed.project,
+      name: parsed.name,
+      size: Number(head.headers.get("Content-Length") ?? 0),
+      contentType: head.headers.get("Content-Type") ?? "application/octet-stream",
+      expiresAt: typeof expires === "number" ? expires : undefined,
+      createdBy: auth.account,
+    };
+    await ctx.runMutation(internal.assets.create, row);
+    return json({
+      url: assetUrl(config, row, request),
+      slug,
+      visibility: row.visibility,
+      expiresAt: row.expiresAt ?? null,
+      key,
+    });
+  }),
+});
+
+http.route({
+  path: "/api/assets",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const auth = authorize(request);
+    if (!auth.ok) return json({ error: "Unauthorized." }, 401);
+    const config = assetsOr503();
+    if (config instanceof Response) return config;
+    const rows = await ctx.runQuery(internal.assets.list, { createdBy: auth.account });
+    return json({
+      assets: rows.map((row) => ({
+        slug: row.slug,
+        key: row.key,
+        project: row.project,
+        name: row.name,
+        visibility: row.visibility,
+        size: row.size,
+        contentType: row.contentType,
+        expiresAt: row.expiresAt ?? null,
+        createdAt: row._creationTime,
+        url: assetUrl(config, row, request),
+      })),
+    });
+  }),
+});
+
+/** Delete one asset, object and row, by `{ slug }` or `{ key }`. */
+http.route({
+  path: "/api/assets/remove",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const auth = authorize(request);
+    if (!auth.ok) return json({ error: "Unauthorized." }, 401);
+    const config = assetsOr503();
+    if (config instanceof Response) return config;
+    const { slug, key } = ((await readJson(request)) ?? {}) as Record<string, unknown>;
+    const row =
+      typeof slug === "string"
+        ? await ctx.runQuery(internal.assets.bySlug, { slug })
+        : typeof key === "string"
+          ? await ctx.runQuery(internal.assets.byKey, { key })
+          : null;
+    if (!row || row.createdBy !== auth.account) return json({ error: "No such asset." }, 404);
+    const gone = await fetch(await presign({ ...config, bucket: row.bucket }, "DELETE", row.key, 60), {
+      method: "DELETE",
+    });
+    // S3 answers 204 for a delete, including of an object that is already gone.
+    if (!gone.ok) return json({ error: `Storage delete failed (${gone.status}).` }, 502);
+    await ctx.runMutation(internal.assets.remove, { id: row._id });
+    return json({ slug: row.slug, key: row.key });
+  }),
+});
+
+/** Plain page for a dead asset link: black, white text, nothing else. */
+const assetNotice = (text: string, status: number) =>
+  new Response(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8">`
+      + `<meta name="viewport" content="width=device-width,initial-scale=1">`
+      + `<meta name="color-scheme" content="dark"><title>${text}</title></head>`
+      + `<body style="margin:0;background:#000;color:#fff;font:17px/1.5 system-ui,-apple-system,sans-serif">`
+      + `<main style="width:min(560px,calc(100% - 32px));margin:0 auto;padding:44px 0">${text}</main></body></html>`,
+    {
+      status,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+        "Cache-Control": "no-store",
+      },
+    },
+  );
+
+/**
+ * A stable link to one asset. No API key: the slug is the credential, as on /s/.
+ * A private asset redirects to a 5-minute presigned GET, so the raw bucket URL
+ * is never the thing that gets shared; a public one redirects to its bucket URL.
+ */
+http.route({
+  pathPrefix: "/a/",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const slug = decodeURIComponent(new URL(request.url).pathname.slice("/a/".length).replace(/\/+$/, ""));
+    const row = slug ? await ctx.runQuery(internal.assets.bySlug, { slug }) : null;
+    if (!row) return assetNotice("This file does not exist.", 404);
+    if (row.expiresAt !== undefined && row.expiresAt < Date.now()) return assetNotice("This file expired", 410);
+    const config = assetsOr503();
+    if (config instanceof Response) return config;
+    const location =
+      row.visibility === "public"
+        ? objectUrl({ ...config, bucket: row.bucket }, row.key)
+        : await presign({ ...config, bucket: row.bucket }, "GET", row.key, 300);
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: location,
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "no-referrer",
+      },
+    });
   }),
 });
 

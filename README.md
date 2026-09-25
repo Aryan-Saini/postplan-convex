@@ -110,6 +110,65 @@ It prints the version, date, bytes, uploader, git commit (when uploaded from a
 repo) and URL of each, newest first. `--json` prints the raw response from
 `GET /api/drafts/<id>/versions`.
 
+## Assets
+
+`asset` publishes files (screenshots, recordings, builds, exports) and prints a URL
+to paste into a PR, a README or a `file` fence.
+
+```bash
+npx postplan-aryan@latest asset shot.png                 # public, permanent
+npx postplan-aryan@latest asset export.csv --private     # stable /a/ link
+npx postplan-aryan@latest asset app.ipa                  # 7 days, plus an iOS install page
+npx postplan-aryan@latest asset a.png b.mp4 --project laborhutt --expires 24h --json
+```
+
+- **Name.** The basename lowercased and hyphenated, with 8 random chars before the
+  extension: `Login Flow.mp4` becomes `login-flow-k3f9x2m8.mp4`. Names never collide
+  and URLs are not guessable.
+- **Project.** The folder the object is filed under: the git repo's name, else the
+  current folder's, else `random` for a generic folder (`~`, Desktop, Downloads,
+  tmp). `--project` overrides it.
+- **Public (default).** Stored at `public/<project>/<name>` in the assets bucket
+  and printed as the bucket's permanent, unsigned URL. That prefix must be
+  public-read.
+- **`--private`.** Stored at `protected/<project>/<name>` and printed as
+  `https://<deployment>/a/<slug>`. That link never changes; each visit gets a 302 to
+  a 5-minute presigned GET, so a raw bucket URL is never what gets shared. The slug is
+  the credential, as on `/s/`. Unknown slugs get a 404.
+- **Expiry.** Builds (`.ipa .apk .aab .app .dmg .pkg .exe .msi`, or a `.zip` whose
+  name contains "build") default to `--expires 7d`; everything else is permanent.
+  `--expires` takes `7d`, `24h`, `never` or an ISO date, and prints
+  `Expires: 2026-10-02T14:03:11Z`, which a `file` fence's `expires` accepts as is.
+  After it, `/a/<slug>` returns 410 "This file expired".
+- **Deletion.** Anything expiring within 7 days is tagged `autodelete=7d`, for a
+  bucket lifecycle rule that deletes objects with that tag 7 days after upload. A
+  longer expiry is enforced by `/a/` only, and the bytes stay until you remove them.
+  A public URL is plain S3, so it keeps working until the object is deleted.
+- **iOS.** For an `.ipa` the CLI reads `CFBundleIdentifier` and
+  `CFBundleShortVersionString` from `Payload/*.app/Info.plist` (python3, or `unzip`
+  and `plutil` on a Mac) and uploads a manifest `.plist` and an install `.html`
+  beside it, with the same visibility and expiry. It prints the
+  `itms-services://?action=download-manifest&url=…` link and the page URL. For a
+  private ipa the manifest points at the ipa's `/a/` link. `--no-manifest` skips it.
+
+`--json` prints `{ url, slug, visibility, expiresAt, key }` for one file (an ipa
+adds `install`), or an array of those for several.
+
+```bash
+npx postplan-aryan assets                 # newest first: project, name, visibility, size, expires, url
+npx postplan-aryan asset rm <slug|url>    # deletes the object and its record
+```
+
+The CLI asks `POST /api/assets/sign` for a presigned PUT, sends the bytes straight
+to S3, then calls `POST /api/assets/record`. The server builds the key, so a client
+cannot write outside `public/` and `protected/`, and it signs the `x-amz-tagging`
+header, which S3 refuses unsigned on a presigned request. Record reads the size and
+type back from S3, so a PUT that never landed leaves no row.
+
+The assets bucket is separate from the drafts bucket and uses the same access keys.
+Without `ASSETS_BUCKET` and `ASSETS_REGION` the asset endpoints answer 503 with a
+message saying so.
+
 ## Self-hosting
 
 You need a Convex project and an S3 bucket. No Postgres, no Railway.
@@ -126,6 +185,9 @@ npx convex env set --prod S3_ACCESS_KEY_ID <key>
 npx convex env set --prod S3_SECRET_ACCESS_KEY <secret>
 npx convex env set --prod POSTPLAN_PUBLIC_BASE_URL https://<deployment>.convex.site
 npx convex env set --prod POSTPLAN_API_KEY <a long random string>
+# only for `asset`:
+npx convex env set --prod ASSETS_BUCKET <assets-bucket>
+npx convex env set --prod ASSETS_REGION <region>
 ```
 
 **Set `POSTPLAN_API_KEY`.** With it unset the upload endpoint is open, and anyone
@@ -136,6 +198,9 @@ from your origin.
 
 Give the bucket a private prefix for drafts; they are reachable only through
 `/d/<draftId>`. Use an IAM user scoped to that prefix, with no `ListBucket`.
+For assets, the same user also needs `s3:PutObject`, `s3:PutObjectTagging`,
+`s3:GetObject` and `s3:DeleteObject` on `<assets-bucket>/public/*` and
+`<assets-bucket>/protected/*`.
 
 ## Content-Security-Policy
 
